@@ -190,3 +190,11 @@ real flash (to test saves without a maze). The wheels stay still unless `TUNE WH
 the virtual robot at the start. Back on the real firmware its map is
 ignored (send `ERASE`). Architecture and conventions: [AGENTS.md](AGENTS.md);
 design notes and investigations: [docs/](docs/).
+
+## Licence
+
+- The code (`firmware/`, `software/`) and the documentation: GPLv3
+  ([LICENSE](LICENSE)).
+- The hardware (`electronics/`, `mechanics/`): Creative Commons
+  Attribution-ShareAlike 4.0 ([electronics/LICENSE](electronics/LICENSE),
+  [mechanics/LICENSE](mechanics/LICENSE)).
