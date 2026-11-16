@@ -1,0 +1,2308 @@
+// Host tests for the robot's decision logic. Exit code != 0 on any failure.
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <math.h>
+#include "control.h"
+#include "control_sim.h"
+#include "crc32.h"
+#include "flash_store.h"
+#include "maze.h"
+#include "params.h"
+#include "path.h"
+#include "robot_config.h"
+#include "search.h"
+#include "sim.h"
+#include "storage.h"
+#include "telemetry.h"
+
+extern int host_verbose;
+extern unsigned char fake_flash[FLASH_STORE_SIZE];
+extern int fake_flash_programs, fake_flash_erases, fake_flash_fail_after, fake_flash_glitch_after;
+void fake_flash_wipe(void);
+void fake_flash_power_cycle(void);
+
+static int checks, failures;
+
+#define CHECK(cond) do { \
+    checks++; \
+    if(!(cond)){ failures++; printf("FAIL %s:%d: %s\n", __FILE__, __LINE__, #cond); } \
+} while(0)
+
+#define CHECK_EQ(a, b) do { \
+    long long va_ = (long long)(a), vb_ = (long long)(b); \
+    checks++; \
+    if(va_ != vb_){ failures++; printf("FAIL %s:%d: %s == %s (%lld != %lld)\n", __FILE__, __LINE__, #a, #b, va_, vb_); } \
+} while(0)
+
+static const plan_costs_t FAST = {FAST_COST_CELL, FAST_COST_TURN};
+static const plan_costs_t SEARCH = {SEARCH_COST_CELL, SEARCH_COST_TURN};
+static uint16_t cost[MAZE_STATES];
+
+// ---- Independent reference planner: plain O(V^2) Dijkstra ----------------------
+
+static uint16_t ref[MAZE_STATES];
+
+static int ref_index(int x, int y, int h){
+    return (y * MAZE_SIZE + x) * 4 + h;
+}
+
+static int ref_passable(int x, int y, int h, plan_mode_t mode){
+    int8_t e = maze_evidence((uint8_t)x, (uint8_t)y, (heading_t)h);
+    int nx = x + (h == 1) - (h == 3), ny = y + (h == 0) - (h == 2);
+    if(nx < 0 || ny < 0 || nx >= MAZE_SIZE || ny >= MAZE_SIZE) return 0;
+    return mode == PLAN_VERIFIED ? e <= -2 : e <= 0;
+}
+
+// backwards = 1: cost to reach `targets`; 0: cost from the state (sx, sy, sh).
+static void reference_plan(int backwards, const cellset_t *targets, int sx, int sy, int sh,
+                           plan_mode_t mode, plan_costs_t k){
+    static unsigned char done[MAZE_STATES];
+    memset(done, 0, sizeof(done));
+    for(int s = 0; s < MAZE_STATES; s++) ref[s] = PLAN_INF;
+    if(backwards){
+        for(int y = 0; y < MAZE_SIZE; y++)
+            for(int x = 0; x < MAZE_SIZE; x++)
+                if((targets->rows[y] >> x) & 1u)
+                    for(int h = 0; h < 4; h++) ref[ref_index(x, y, h)] = 0;
+    }
+    else{
+        ref[ref_index(sx, sy, sh)] = 0;
+    }
+    for(;;){
+        int best = -1;
+        for(int s = 0; s < MAZE_STATES; s++){
+            if(!done[s] && ref[s] != PLAN_INF && (best < 0 || ref[s] < ref[best])) best = s;
+        }
+        if(best < 0) break;
+        done[best] = 1;
+        int h = best % 4, x = (best / 4) % MAZE_SIZE, y = (best / 4) / MAZE_SIZE;
+        int dx = (h == 1) - (h == 3), dy = (h == 0) - (h == 2);
+        int n[3], w[3], count = 0;
+        if(backwards){
+            if(ref_passable(x - dx, y - dy, h, mode) && x - dx >= 0 && y - dy >= 0 && x - dx < MAZE_SIZE && y - dy < MAZE_SIZE){
+                n[count] = ref_index(x - dx, y - dy, h); w[count++] = k.cell;
+            }
+        }
+        else if(ref_passable(x, y, h, mode)){
+            n[count] = ref_index(x + dx, y + dy, h); w[count++] = k.cell;
+        }
+        n[count] = ref_index(x, y, (h + 1) % 4); w[count++] = k.turn;
+        n[count] = ref_index(x, y, (h + 3) % 4); w[count++] = k.turn;
+        for(int i = 0; i < count; i++){
+            if(!done[n[i]] && ref[best] + w[i] < ref[n[i]]) ref[n[i]] = (uint16_t)(ref[best] + w[i]);
+        }
+    }
+}
+
+// Optimal speed-run cost start->goal in the TRUE maze (map restored after).
+static uint16_t true_optimum(void){
+    maze_snapshot_t saved;
+    cellset_t goal;
+    maze_export(&saved);
+    truth_load_into_map();
+    maze_goal_cells(&goal);
+    reference_plan(1, &goal, 0, 0, 0, PLAN_VERIFIED, FAST);
+    uint16_t best = ref[ref_index(START_X, START_Y, NORTH)];
+    CHECK(maze_import(&saved));
+    return best;
+}
+
+// Every belief held by the map must match the true maze.
+static int map_matches_truth(void){
+    for(uint8_t x = 0; x < MAZE_SIZE; x++){
+        for(uint8_t y = 0; y < MAZE_SIZE; y++){
+            for(uint8_t h = 0; h < 4; h++){
+                wall_state_t w = maze_wall(x, y, (heading_t)h);
+                if(w == WALL_UNKNOWN) continue;
+                if((w == WALL_PRESENT) != truth_wall(x, y, (heading_t)h)) return 0;
+            }
+        }
+    }
+    return 1;
+}
+
+static void randomize_evidence(uint32_t seed){
+    srand(seed);
+    maze_init();
+    for(uint8_t x = 0; x < MAZE_SIZE; x++){
+        for(uint8_t y = 0; y < MAZE_SIZE; y++){
+            for(uint8_t h = 0; h < 2; h++){     // north and east cover every wall once
+                int v = rand() % 7 - 3;         // -3..3
+                heading_t d = h ? EAST : NORTH;
+                if(v == 3 || v == 2) maze_mark_blocked(x, y, d);
+                else if(v == -3) maze_mark_crossed(x, y, d);
+                else for(int i = 0; i < (v < 0 ? -v : v); i++) maze_observe(x, y, d, v > 0);
+                if(rand() % 3 == 0) maze_mark_visited(x, y);
+            }
+        }
+    }
+}
+
+// ---- Unit tests -------------------------------------------------------------------
+
+static void test_crc32(void){
+    CHECK_EQ(crc32_update(0, "123456789", 9), 0xCBF43926u);
+    uint32_t c = crc32_update(0, "1234", 4);
+    CHECK_EQ(crc32_update(c, "56789", 5), 0xCBF43926u);
+    CHECK_EQ(crc32_update(0, "", 0), 0);
+}
+
+static void test_evidence(void){
+    maze_init();
+    CHECK_EQ(maze_wall(3, 3, NORTH), WALL_UNKNOWN);
+    maze_observe(3, 3, NORTH, 1);
+    CHECK_EQ(maze_wall(3, 3, NORTH), WALL_PRESENT);     // one sighting counts at once
+    CHECK_EQ(maze_wall(3, 4, SOUTH), WALL_PRESENT);     // same wall seen from the neighbour
+    maze_observe(3, 4, SOUTH, 0);
+    CHECK_EQ(maze_wall(3, 3, NORTH), WALL_UNKNOWN);     // one contradiction: doubtful
+    maze_observe(3, 3, NORTH, 0);
+    CHECK_EQ(maze_wall(3, 3, NORTH), WALL_ABSENT);
+
+    for(int i = 0; i < 10; i++) maze_observe(5, 5, EAST, 1);
+    CHECK_EQ(maze_evidence(5, 5, EAST), 3);             // saturates
+    for(int i = 0; i < 3; i++) maze_observe(6, 5, WEST, 0);
+    CHECK_EQ(maze_wall(5, 5, EAST), WALL_UNKNOWN);      // a firm wall needs as many contradictions
+
+    CHECK_EQ(maze_wall(0, 0, WEST), WALL_PRESENT);      // border
+    CHECK_EQ(maze_wall(0, 0, SOUTH), WALL_PRESENT);
+    CHECK_EQ(maze_wall(15, 15, NORTH), WALL_PRESENT);
+    CHECK_EQ(maze_wall(15, 15, EAST), WALL_PRESENT);
+    maze_observe(0, 0, WEST, 0);
+    maze_mark_crossed(0, 0, WEST);
+    CHECK_EQ(maze_wall(0, 0, WEST), WALL_PRESENT);      // the border never opens
+
+    maze_mark_crossed(2, 2, EAST);
+    CHECK_EQ(maze_evidence(3, 2, WEST), -3);
+    maze_mark_blocked(2, 2, EAST);
+    CHECK_EQ(maze_evidence(2, 2, EAST), 2);
+    maze_mark_blocked(2, 2, EAST);
+    CHECK_EQ(maze_evidence(2, 2, EAST), 3);
+
+    maze_init();
+    maze_observe(1, 1, NORTH, 1);
+    maze_observe(2, 2, NORTH, 1);
+    maze_observe(2, 2, NORTH, 1);
+    maze_observe(4, 4, NORTH, 0);
+    maze_observe(6, 6, WEST, 1);
+    CHECK_EQ(maze_forget_walls(1, 6, 6), 1);           // (6,6) keeps its walls
+    CHECK_EQ(maze_wall(1, 1, NORTH), WALL_UNKNOWN);
+    CHECK_EQ(maze_wall(2, 2, NORTH), WALL_PRESENT);
+    CHECK_EQ(maze_wall(5, 6, EAST), WALL_PRESENT);     // the same wall as (6,6) WEST
+    CHECK_EQ(maze_forget_walls(INT8_MAX, MAZE_SIZE, MAZE_SIZE), 2);
+    CHECK_EQ(maze_wall(4, 4, NORTH), WALL_ABSENT);      // open passages are kept
+
+    maze_init();
+    maze_mark_visited(3, 4);
+    maze_mark_visited(3, 4);
+    maze_mark_visited(15, 15);
+    CHECK_EQ(maze_visited_count(), 2);
+    CHECK(maze_is_visited(3, 4));
+    CHECK(!maze_is_visited(4, 3));
+
+    CHECK(!maze_set_goal(3, 3, 2, 2));
+    CHECK(!maze_set_goal(0, 0, 16, 0));
+    CHECK(maze_set_goal(7, 7, 8, 8));
+    CHECK(maze_is_goal(8, 7));
+    CHECK(!maze_is_goal(9, 7));
+
+    // ERASE: map forgotten and the build's default goal back, whatever GOAL set.
+    maze_set_goal(3, 2, 3, 2);
+    maze_observe(1, 1, NORTH, 1);
+    maze_erase();
+    uint8_t g[4];
+    maze_get_goal(g);
+    CHECK(g[0] == GOAL_X0 && g[1] == GOAL_Y0 && g[2] == GOAL_X1 && g[3] == GOAL_Y1);
+    CHECK_EQ(maze_wall(1, 1, NORTH), WALL_UNKNOWN);
+    CHECK_EQ(maze_visited_count(), 0);
+    maze_set_goal(7, 7, 8, 8);
+}
+
+static void test_side_doubt(void){
+    const float close = FRONT_WALL_REF_MM - SIDE_CLOSE_DOUBT_MM;
+    wall_sense_t w;
+    // Square to a front wall at the right distance: sides trusted.
+    w = (wall_sense_t){SEEN_PRESENT, SEEN_PRESENT, SEEN_PRESENT, 0};
+    motion_doubt_sides(&w, 1, 1, 94, 94, 0, SIDE_YAW_DOUBT_MM, close);
+    CHECK(w.left == SEEN_PRESENT && w.right == SEEN_PRESENT);
+    // Rotated left (FL farther): the right beam swings forward.
+    w = (wall_sense_t){SEEN_PRESENT, SEEN_PRESENT, SEEN_PRESENT, 0};
+    motion_doubt_sides(&w, 1, 1, 110, 80, 0, SIDE_YAW_DOUBT_MM, close);
+    CHECK(w.left == SEEN_PRESENT && w.right == SEEN_DOUBTFUL);
+    // Rotated right.
+    w = (wall_sense_t){SEEN_PRESENT, SEEN_PRESENT, SEEN_PRESENT, 0};
+    motion_doubt_sides(&w, 1, 1, 80, 110, 0, SIDE_YAW_DOUBT_MM, close);
+    CHECK(w.left == SEEN_DOUBTFUL && w.right == SEEN_PRESENT);
+    // The square offset is taken into account.
+    w = (wall_sense_t){SEEN_PRESENT, SEEN_PRESENT, SEEN_PRESENT, 0};
+    motion_doubt_sides(&w, 1, 1, 80, 110, -30, SIDE_YAW_DOUBT_MM, close);
+    CHECK(w.left == SEEN_PRESENT && w.right == SEEN_PRESENT);
+    // Stopped too close to the front wall: both sides doubtful.
+    w = (wall_sense_t){SEEN_PRESENT, SEEN_PRESENT, SEEN_PRESENT, 0};
+    motion_doubt_sides(&w, 1, 1, 50, 52, 0, SIDE_YAW_DOUBT_MM, close);
+    CHECK(w.left == SEEN_DOUBTFUL && w.right == SEEN_DOUBTFUL);
+    // Only the right front sensor sees something: only the right side doubted.
+    w = (wall_sense_t){SEEN_ABSENT, SEEN_PRESENT, SEEN_PRESENT, 0};
+    motion_doubt_sides(&w, 0, 1, 300, 90, 0, SIDE_YAW_DOUBT_MM, close);
+    CHECK(w.left == SEEN_PRESENT && w.right == SEEN_DOUBTFUL);
+    // Nothing in front: nothing to go on, sides trusted.
+    w = (wall_sense_t){SEEN_ABSENT, SEEN_PRESENT, SEEN_PRESENT, 0};
+    motion_doubt_sides(&w, 0, 0, 300, 300, 0, SIDE_YAW_DOUBT_MM, close);
+    CHECK(w.left == SEEN_PRESENT && w.right == SEEN_PRESENT);
+    // "No wall" readings are never doubted: that failure only adds walls.
+    w = (wall_sense_t){SEEN_PRESENT, SEEN_ABSENT, SEEN_ABSENT, 0};
+    motion_doubt_sides(&w, 1, 1, 50, 52, 0, SIDE_YAW_DOUBT_MM, close);
+    CHECK(w.left == SEEN_ABSENT && w.right == SEEN_ABSENT);
+}
+
+static curve_t default_curve(void){
+    curve_t c;
+    CHECK(curve_setup(&c, CURVE_RADIUS_MM, CURVE_RAMP_MM, CURVE_ANGLE_DEG, CELL_MM));
+    return c;
+}
+
+// Seconds a speed run's reference takes along a route.
+static float route_seconds(const int8_t *turns, uint8_t cells, float v_fast, float v_curve){
+    const curve_t c = default_curve();
+    const run_path_t path = {turns, cells};
+    path_run_t r;
+    profile_t f, o;
+    profile_reset(&f);
+    profile_reset(&o);
+    if(!path_start(&r, &path, &c, CELL_MM, v_fast, v_curve, PARAM_ACCEL)) return 0.0f;
+    uint32_t steps = 0;
+    while(!r.done && steps < 1000000u){
+        path_step(&r, &f, &o, CONTROL_DT_S);
+        steps++;
+    }
+    return (float)steps * CONTROL_DT_S;
+}
+
+static void test_planner_basics(void){
+    cellset_t goal;
+    maze_init();
+    maze_set_goal(7, 7, 8, 8);
+    maze_goal_cells(&goal);
+
+    maze_plan_to(&goal, PLAN_OPTIMISTIC, FAST, cost);
+    CHECK_EQ(cost[maze_state(0, 0, NORTH)], 14 * FAST_COST_CELL + FAST_COST_TURN);  // 7 up, turn, 7 right
+    CHECK_EQ(cost[maze_state(8, 7, WEST)], 0);
+    CHECK_EQ(maze_best_action(cost, 0, 0, NORTH, PLAN_OPTIMISTIC, FAST), ACT_FORWARD);
+    CHECK_EQ(maze_best_action(cost, 0, 0, SOUTH, PLAN_OPTIMISTIC, FAST), ACT_TURN_LEFT);    // east first: one turn
+    CHECK_EQ(maze_best_action(cost, 7, 7, NORTH, PLAN_OPTIMISTIC, FAST), ACT_NONE);         // already there
+
+    maze_plan_to(&goal, PLAN_VERIFIED, FAST, cost);
+    CHECK_EQ(cost[maze_state(0, 0, NORTH)], PLAN_INF);  // nothing verified yet
+    CHECK_EQ(maze_best_action(cost, 0, 0, NORTH, PLAN_VERIFIED, FAST), ACT_NONE);
+
+    // Dead end facing north: turning around must be one action.
+    maze_init();
+    maze_mark_blocked(0, 1, NORTH);
+    maze_mark_blocked(0, 1, EAST);
+    maze_plan_to(&goal, PLAN_OPTIMISTIC, FAST, cost);
+    CHECK_EQ(maze_best_action(cost, 0, 1, NORTH, PLAN_OPTIMISTIC, FAST), ACT_TURN_AROUND);
+
+    // Fully known empty maze: routes.
+    truth_reset(0);
+    truth_load_into_map();
+    int8_t turn, turns[PATH_MAX_CELLS];
+    uint8_t cells;
+    maze_set_goal(0, 5, 0, 5);
+    maze_goal_cells(&goal);
+    maze_plan_to(&goal, PLAN_VERIFIED, FAST, cost);
+    CHECK(maze_route(cost, 0, 0, NORTH, PLAN_VERIFIED, FAST, &turn, turns, PATH_MAX_CELLS, &cells));
+    CHECK_EQ(turn, 0);
+    CHECK_EQ(cells, 5);
+    CHECK(maze_route(cost, 0, 0, SOUTH, PLAN_VERIFIED, FAST, &turn, turns, PATH_MAX_CELLS, &cells));
+    CHECK_EQ(turn, 2);
+    CHECK_EQ(cells, 5);
+    CHECK(!maze_route(cost, 0, 5, EAST, PLAN_VERIFIED, FAST, &turn, turns, PATH_MAX_CELLS, &cells));
+    maze_set_goal(15, 0, 15, 0);
+    maze_goal_cells(&goal);
+    maze_plan_to(&goal, PLAN_VERIFIED, FAST, cost);
+    CHECK(maze_route(cost, 0, 0, NORTH, PLAN_VERIFIED, FAST, &turn, turns, PATH_MAX_CELLS, &cells));
+    CHECK_EQ(turn, 1);
+    CHECK_EQ(cells, 15);
+    // Around a corner without stopping: north 5, curve right in the 5th cell, east 3.
+    maze_set_goal(3, 5, 3, 5);
+    maze_goal_cells(&goal);
+    maze_plan_to(&goal, PLAN_VERIFIED, FAST, cost);
+    CHECK(maze_route(cost, 0, 0, NORTH, PLAN_VERIFIED, FAST, &turn, turns, PATH_MAX_CELLS, &cells));
+    CHECK_EQ(turn, 0);
+    CHECK_EQ(cells, 8);
+    for(uint8_t i = 0; i < cells; i++) CHECK_EQ(turns[i], i == 4 ? 1 : 0);
+    // A route longer than the buffer stops at the centre of its last cell.
+    CHECK(maze_route(cost, 0, 0, NORTH, PLAN_VERIFIED, FAST, &turn, turns, 5, &cells));
+    CHECK_EQ(cells, 5);
+    CHECK_EQ(turns[4], 0);
+
+    // Optimal in time: to (3,3), a staircase (6 cells, 5 curves) beats a detour (8 cells, 2 turns).
+    truth_reset(1);
+    truth_set_wall(0, 0, NORTH, 0);     // staircase N E N E N E
+    truth_set_wall(0, 1, EAST, 0);
+    truth_set_wall(1, 1, NORTH, 0);
+    truth_set_wall(1, 2, EAST, 0);
+    truth_set_wall(2, 2, NORTH, 0);
+    truth_set_wall(2, 3, EAST, 0);
+    truth_set_wall(0, 1, NORTH, 0);     // detour: north to (0,4)...
+    truth_set_wall(0, 2, NORTH, 0);
+    truth_set_wall(0, 3, NORTH, 0);
+    truth_set_wall(0, 4, EAST, 0);      // ...east to (3,4)...
+    truth_set_wall(1, 4, EAST, 0);
+    truth_set_wall(2, 4, EAST, 0);
+    truth_set_wall(3, 4, SOUTH, 0);     // ...and down into (3,3)
+    truth_load_into_map();
+    maze_set_goal(3, 3, 3, 3);
+    maze_goal_cells(&goal);
+    maze_plan_to(&goal, PLAN_VERIFIED, FAST, cost);
+    CHECK_EQ(cost[maze_state(0, 0, NORTH)], 6 * FAST_COST_CELL + 5 * FAST_COST_TURN);
+    CHECK(maze_route(cost, 0, 0, NORTH, PLAN_VERIFIED, FAST, &turn, turns, PATH_MAX_CELLS, &cells));
+    CHECK_EQ(turn, 0);
+    CHECK_EQ(cells, 6);
+    static const int8_t staircase[6] = {1, -1, 1, -1, 1, 0}, detour[8] = {0, 0, 0, 1, 0, 0, 1, 0};
+    for(uint8_t i = 0; i < cells; i++) CHECK_EQ(turns[i], staircase[i]);
+    CHECK(route_seconds(staircase, 6, PARAM_FAST_SPEED, PARAM_CURVE_SPEED) < route_seconds(detour, 8, PARAM_FAST_SPEED,
+                                                                                            PARAM_CURVE_SPEED));
+}
+
+// SPFA against an independent Dijkstra on random evidence maps; the best actions must realise the planned cost.
+static void test_planner_against_reference(void){
+    const plan_costs_t cost_models[2] = {FAST, SEARCH};
+    int mismatches = 0, walk_errors = 0;
+    for(uint32_t seed = 1; seed <= 60; seed++){
+        randomize_evidence(seed);
+        cellset_t targets;
+        cellset_clear(&targets);
+        for(int i = 0; i < 1 + (int)(seed % 4); i++) cellset_add(&targets, (uint8_t)(rand() % 16), (uint8_t)(rand() % 16));
+        for(int mode = 0; mode < 2; mode++){
+            plan_costs_t k = cost_models[seed % 2];
+            maze_plan_to(&targets, (plan_mode_t)mode, k, cost);
+            reference_plan(1, &targets, 0, 0, 0, (plan_mode_t)mode, k);
+            for(int s = 0; s < MAZE_STATES; s++) mismatches += cost[s] != ref[s];
+
+            for(int s = 0; s < MAZE_STATES; s += 7){
+                if(cost[s] == PLAN_INF) continue;
+                uint8_t x = (uint8_t)((s / 4) % MAZE_SIZE), y = (uint8_t)((s / 4) / MAZE_SIZE);
+                heading_t h = (heading_t)(s % 4);
+                uint32_t spent = 0;
+                for(int step = 0; step < MAZE_STATES; step++){
+                    action_t a = maze_best_action(cost, x, y, h, (plan_mode_t)mode, k);
+                    if(a == ACT_NONE) break;
+                    if(a == ACT_FORWARD){ x = (uint8_t)(x + heading_dx(h)); y = (uint8_t)(y + heading_dy(h)); spent += k.cell; }
+                    else if(a == ACT_TURN_LEFT){ h = heading_left(h); spent += k.turn; }
+                    else if(a == ACT_TURN_RIGHT){ h = heading_right(h); spent += k.turn; }
+                    else{ h = heading_back(h); spent += 2u * k.turn; }
+                }
+                walk_errors += !cellset_has(&targets, x, y) || spent != cost[s];
+                // The same path as a route driven in one go: same cells, same cost.
+                int8_t turn, turns[PATH_MAX_CELLS];
+                uint8_t cells;
+                x = (uint8_t)((s / 4) % MAZE_SIZE);
+                y = (uint8_t)((s / 4) / MAZE_SIZE);
+                h = (heading_t)(s % 4);
+                if(!maze_route(cost, x, y, h, (plan_mode_t)mode, k, &turn, turns, PATH_MAX_CELLS, &cells)){
+                    walk_errors += cost[s] != 0;
+                    continue;
+                }
+                spent = (uint32_t)(turn < 0 ? -turn : turn) * k.turn;
+                h = (heading_t)((h + turn + 4) & 3);
+                for(uint8_t i = 0; i < cells; i++){
+                    x = (uint8_t)(x + heading_dx(h));
+                    y = (uint8_t)(y + heading_dy(h));
+                    h = (heading_t)((h + turns[i] + 4) & 3);
+                    spent += k.cell + (turns[i] ? k.turn : 0u);
+                }
+                walk_errors += !cellset_has(&targets, x, y) || spent != cost[s] || !cells || turns[cells - 1];
+            }
+
+            uint8_t sx = (uint8_t)(seed % 16), sy = (uint8_t)((seed * 7) % 16);
+            maze_plan_from(sx, sy, (heading_t)(seed % 4), (plan_mode_t)mode, k, cost);
+            reference_plan(0, NULL, sx, sy, (int)(seed % 4), (plan_mode_t)mode, k);
+            for(int s = 0; s < MAZE_STATES; s++) mismatches += cost[s] != ref[s];
+        }
+    }
+    CHECK_EQ(mismatches, 0);
+    CHECK_EQ(walk_errors, 0);
+}
+
+// A record changed by hand at `at` in the fake flash: seal it again.
+static void reseal(uint16_t at){
+    uint16_t size;
+    memcpy(&size, fake_flash + at + 6, sizeof(size));
+    const uint32_t crc = crc32_update(0, fake_flash + at, (size_t)size - 4u);
+    memcpy(fake_flash + at + size - 4, &crc, sizeof(crc));
+}
+
+static void fill_test_map(void){
+    maze_init();
+    maze_observe(4, 4, EAST, 1);
+    maze_mark_crossed(0, 0, NORTH);
+    maze_mark_visited(4, 4);
+    maze_set_goal(3, 2, 3, 2);
+    for(int i = 0; i < 3; i++){
+        maze_observe(10, 10, NORTH, 1);     // every evidence level must survive the packing
+        maze_observe(11, 11, EAST, 0);
+    }
+    maze_observe(12, 12, NORTH, 0);
+}
+
+// A run's end saves only a changed map (switching race presets spent a slot on every run).
+static void test_storage_map_only(void){
+    fake_flash_wipe();
+    params_reset();
+    fill_test_map();
+    CHECK_EQ(storage_save(1), STORAGE_WRITTEN);
+    int programs = fake_flash_programs;
+    params.fast_speed = 777;
+    CHECK_EQ(storage_save(1), STORAGE_UNCHANGED);
+    CHECK_EQ(fake_flash_programs, programs);
+    maze_observe(12, 12, NORTH, 0);
+    CHECK_EQ(storage_save(1), STORAGE_WRITTEN);
+    CHECK_EQ(storage_save(1), STORAGE_UNCHANGED);
+    params.fast_speed = 778;
+    CHECK_EQ(storage_save(0), STORAGE_WRITTEN);
+    CHECK_EQ(storage_free_slots(), 3);
+    params_reset();
+    CHECK_EQ(storage_load(), STORAGE_LOADED);
+    CHECK_EQ(params.fast_speed, 778);
+    CHECK_EQ(maze_evidence(12, 12, NORTH), -2);
+}
+
+// Races there and back on layout I switching presets: they only read the map, nothing is written.
+static void test_races_only_read(void){
+    fake_flash_wipe();
+    params_reset();
+    truth_reset(1);
+    for(uint8_t x = 0; x < 3; x++){
+        truth_set_wall(x, 0, EAST, 0);
+        truth_set_wall(x, 2, EAST, 0);
+    }
+    for(uint8_t y = 0; y < 2; y++){
+        truth_set_wall(0, y, NORTH, 0);
+        truth_set_wall(3, y, NORTH, 0);
+    }
+    maze_init();
+    maze_set_goal(3, 2, 3, 2);
+    sim_reset(0.0, 1);
+    search_set_home();
+    CHECK_EQ(search_explore(), RUN_OK);
+    maze_snapshot_t before, after;
+    maze_export(&before);
+    const int programs = fake_flash_programs;
+    for(int k = 0; k < 5; k++){
+        params.fast_speed = (int16_t)(k & 1 ? 900 : 800);
+        sim_reset(0.0, 10u + (uint32_t)k);
+        CHECK_EQ(search_fast_run(1), RUN_OK);
+    }
+    // Race 2.3, and the wall followers (2.1, 2.2), which explore on a map of their own.
+    sim_reset(0.0, 20);
+    CHECK_EQ(search_fast_run(0), RUN_OK);
+    for(uint8_t left = 0; left < 2; left++){
+        sim_reset(0.0, 30u + left);
+        sim_abort_after_cells(40);
+        CHECK_EQ(search_wall_follow(left), RUN_ABORTED);
+        CHECK(sim_stats.forward_cells >= 40);
+    }
+    maze_export(&after);
+    CHECK(memcmp(&before, &after, sizeof(before)) == 0);
+    CHECK_EQ(fake_flash_programs, programs);
+    maze_set_goal(GOAL_X0, GOAL_Y0, GOAL_X1, GOAL_Y1);
+}
+
+// The store is a log: saves only program erased slots, the newest valid record wins, only the boot erases.
+static void test_storage(void){
+    fake_flash_wipe();
+    params_reset();
+    CHECK_EQ(storage_load(), STORAGE_EMPTY);
+    CHECK_EQ(storage_free_slots(), 6);
+    CHECK(!storage_needs_compact());
+
+    fill_test_map();
+    params.search_speed = 123;
+    params.turn_ticks = 415;
+    params.accel = 4321;
+    params.kd = 0.75f;
+    CHECK_EQ(storage_save(0), STORAGE_WRITTEN);
+    uint16_t size;
+    memcpy(&size, fake_flash + 6, sizeof(size));
+    CHECK(3u * size <= FLASH_STORE_PAGE_SIZE);
+    // The same record again: nothing programmed.
+    int programs = fake_flash_programs;
+    CHECK_EQ(storage_save(0), STORAGE_UNCHANGED);
+    CHECK_EQ(fake_flash_programs, programs);
+
+    maze_init();
+    maze_set_goal(7, 7, 8, 8);
+    params_reset();
+    CHECK_EQ(storage_load(), STORAGE_LOADED);
+    CHECK_EQ(maze_wall(4, 4, EAST), WALL_PRESENT);
+    CHECK_EQ(maze_evidence(0, 0, NORTH), -3);
+    CHECK_EQ(maze_evidence(10, 10, NORTH), 3);
+    CHECK_EQ(maze_evidence(11, 11, EAST), -3);
+    CHECK_EQ(maze_evidence(12, 12, NORTH), -1);
+    CHECK_EQ(maze_evidence(5, 5, EAST), 0);
+    CHECK(maze_is_visited(4, 4));
+    CHECK(!maze_is_visited(5, 4));
+    CHECK(maze_is_goal(3, 2));
+    CHECK(!maze_is_goal(7, 7));
+    CHECK_EQ(params.search_speed, 123);
+    CHECK_EQ(params.turn_ticks, 415);
+    CHECK_EQ(params.accel, 4321);
+    CHECK(params.kd == 0.75f);
+
+    // Every change is a new record in the next free slot; with none left the map stays in RAM.
+    const int erases = fake_flash_erases;
+    for(uint8_t i = 0; i < 5; i++){
+        maze_mark_visited(i, 9);
+        CHECK_EQ(storage_save(0), STORAGE_WRITTEN);
+    }
+    CHECK_EQ(storage_free_slots(), 0);
+    maze_mark_visited(9, 9);
+    CHECK_EQ(storage_save(0), STORAGE_FULL);
+    CHECK_EQ(fake_flash_erases, erases);
+    maze_init();
+    CHECK_EQ(storage_load(), STORAGE_LOADED);
+    CHECK(maze_is_visited(4, 9) && !maze_is_visited(9, 9));
+
+    // The boot compacts: the newest record stays, the other slots freed with two erases.
+    CHECK(storage_needs_compact());
+    CHECK(storage_compact());
+    CHECK_EQ(fake_flash_erases, erases + 2);
+    CHECK_EQ(storage_free_slots(), 5);
+    CHECK(!storage_needs_compact());
+    maze_init();
+    CHECK_EQ(storage_load(), STORAGE_LOADED);
+    CHECK(maze_is_visited(4, 9));
+    maze_mark_visited(9, 9);
+    CHECK_EQ(storage_save(0), STORAGE_WRITTEN);
+    maze_init();
+    CHECK_EQ(storage_load(), STORAGE_LOADED);
+    CHECK(maze_is_visited(9, 9));
+
+    // A halfword lands wrong but the flash recovers: the save goes on in the next slot.
+    maze_mark_visited(7, 9);
+    const uint8_t free_before = storage_free_slots();
+    fake_flash_glitch_after = 40;
+    CHECK_EQ(storage_save(0), STORAGE_WRITTEN);
+    CHECK(!flash_store_blocked());
+    CHECK_EQ(storage_free_slots(), free_before - 2);
+    maze_init();
+    CHECK_EQ(storage_load(), STORAGE_LOADED);
+    CHECK(maze_is_visited(7, 9));
+
+    // The flash wedges mid-save: the store refuses everything until a power cycle, the previous record loads.
+    maze_mark_visited(8, 8);
+    fake_flash_fail_after = 40;
+    CHECK_EQ(storage_save(0), STORAGE_FAILED);
+    CHECK(flash_store_blocked());
+    CHECK_EQ(storage_save(0), STORAGE_FAILED);
+    maze_init();
+    CHECK_EQ(storage_load(), STORAGE_LOADED);
+    CHECK(maze_is_visited(9, 9) && !maze_is_visited(8, 8));
+    fake_flash_power_cycle();
+    CHECK(storage_needs_compact());         // the half-written slot is neither free nor valid
+    CHECK(storage_compact());
+    CHECK_EQ(storage_free_slots(), 5);
+    CHECK_EQ(storage_load(), STORAGE_LOADED);
+    CHECK(maze_is_visited(9, 9));
+
+    // A power cut between the copy and the erase of its old page: the copy wins, the next boot finishes.
+    for(uint8_t i = 0; i < 2; i++){
+        maze_mark_visited(i, 12);
+        CHECK_EQ(storage_save(0), STORAGE_WRITTEN);
+    }
+    fake_flash_fail_after = (int)(size / 2u);   // the copy lands, the next erase does not
+    CHECK(!storage_compact());
+    fake_flash_power_cycle();
+    maze_init();
+    CHECK_EQ(storage_load(), STORAGE_LOADED);
+    CHECK(maze_is_visited(1, 12));
+    CHECK(storage_needs_compact());
+    CHECK(storage_compact());
+    CHECK_EQ(storage_free_slots(), 5);
+    maze_init();
+    CHECK_EQ(storage_load(), STORAGE_LOADED);
+    CHECK(maze_is_visited(1, 12) && maze_is_visited(4, 4));
+
+    // Find the current record for the checks below.
+    uint16_t at = 0;
+    for(uint16_t s = 0; s < 6; s++){
+        const uint16_t o = (uint16_t)((s / 3u) * FLASH_STORE_PAGE_SIZE + (s % 3u) * size);
+        uint32_t magic;
+        memcpy(&magic, fake_flash + o, sizeof(magic));
+        if(magic == 0x4D544152u) at = o;
+    }
+
+    // A corrupt record is rejected and leaves RAM untouched.
+    maze_init();
+    fake_flash[at + 40] ^= 0x55;
+    CHECK_EQ(storage_load(), STORAGE_CORRUPT);
+    CHECK_EQ(maze_wall(4, 4, EAST), WALL_UNKNOWN);
+    fake_flash[at + 40] ^= 0x55;
+    CHECK_EQ(storage_load(), STORAGE_LOADED);
+
+    // Saved by firmware with other parameter defaults: map and goal load, the parameters stay the new defaults.
+    fake_flash[at + 16] ^= 0xFF;    // parameter signature
+    reseal(at);
+    maze_init();
+    maze_set_goal(7, 7, 8, 8);
+    params_reset();
+    CHECK_EQ(storage_load(), STORAGE_NEW_DEFAULTS);
+    CHECK_EQ(maze_wall(4, 4, EAST), WALL_PRESENT);
+    CHECK(maze_is_goal(3, 2));
+    CHECK_EQ(params.search_speed, PARAM_SEARCH_SPEED);
+    CHECK_EQ(params.accel, PARAM_ACCEL);
+    fake_flash[at + 16] ^= 0xFF;
+
+    // Saved by firmware for another maze: ignored even with a valid CRC.
+    fake_flash[at + 12] ^= 0xFF;    // maze signature
+    reseal(at);
+    maze_init();
+    params_reset();
+    CHECK_EQ(storage_load(), STORAGE_STALE);
+    CHECK_EQ(maze_wall(4, 4, EAST), WALL_UNKNOWN);
+    CHECK_EQ(params.search_speed, PARAM_SEARCH_SPEED);
+    fake_flash[at + 12] ^= 0xFF;
+    reseal(at);
+    CHECK_EQ(storage_load(), STORAGE_LOADED);
+
+    // The old one-page layout (STORE_VERSION 6): stale, cleared by the boot's compaction.
+    fake_flash_wipe();
+    const uint32_t magic = 0x4D544152u;
+    const uint16_t v6 = 6, v6_size = 592;
+    memcpy(fake_flash + FLASH_STORE_PAGE_SIZE, &magic, sizeof(magic));
+    memcpy(fake_flash + FLASH_STORE_PAGE_SIZE + 4, &v6, sizeof(v6));
+    memcpy(fake_flash + FLASH_STORE_PAGE_SIZE + 6, &v6_size, sizeof(v6_size));
+    memset(fake_flash + FLASH_STORE_PAGE_SIZE + 8, 0x11, v6_size - 8u);
+    CHECK_EQ(storage_load(), STORAGE_STALE);
+    CHECK(storage_needs_compact());
+    CHECK(storage_compact());
+    CHECK_EQ(storage_free_slots(), 6);
+    CHECK_EQ(storage_load(), STORAGE_EMPTY);
+    params_reset();
+    maze_init();
+    maze_set_goal(GOAL_X0, GOAL_Y0, GOAL_X1, GOAL_Y1);
+}
+
+// The firmware's own square root against the C library's.
+static void test_sqrt(void){
+    float worst = 0.0f;
+    for(float x = 1e-4f; x < 1e7f; x *= 1.37f){
+        const float err = fabsf(control_sqrt(x) - sqrtf(x)) / sqrtf(x);
+        if(err > worst) worst = err;
+    }
+    CHECK(worst < 1e-6f);
+    CHECK(control_sqrt(0.0f) == 0.0f && control_sqrt(-4.0f) == 0.0f);
+    CHECK(control_sqrt(4.0f) == 2.0f);
+}
+
+// ---- Simulation --------------------------------------------------------------------
+
+typedef struct {
+    int runs, search_ok, fast_ok, optimal, consistent, back_home;
+    long blocked, crashes, search_actions, search_cells, search_senses, fast_cells, fast_curves, fast_turns;
+    long search_stops;
+    uint32_t decide_pops_max;   // the searches' worst decision on the way
+    double search_seconds;
+} summary_t;
+
+static void print_summary(const char *name, const summary_t *s){
+    printf("  %-34s runs %3d | search ok %3d, optimal %3d, map ok %3d | fast ok %3d, home %3d | "
+           "blocked %ld crashes %ld | avg search %.1f s %ld stops %ld cells | avg fast %ld cells %ld curves %ld turns\n",
+           name, s->runs, s->search_ok, s->optimal, s->consistent, s->fast_ok, s->back_home,
+           s->blocked, s->crashes, s->search_seconds / s->runs, s->search_stops / s->runs, s->search_cells / s->runs,
+           s->fast_cells / (s->runs ? s->runs : 1), s->fast_curves / (s->runs ? s->runs : 1),
+           s->fast_turns / (s->runs ? s->runs : 1));
+}
+
+// Full competition cycle on one maze: search, then speed run + return.
+static void run_cycle(summary_t *s, double noise, uint32_t seed, double doubt){
+    maze_init();
+    params_reset();
+    fake_flash_wipe();
+    sim_reset(noise, seed);
+    sim_side_doubt(doubt);
+    search_set_home();
+    s->runs++;
+
+    run_result_t r = search_explore();
+    int home = sim_x == START_X && sim_y == START_Y && sim_h == NORTH;
+    if(r == RUN_OK && home && search_ready()) s->search_ok++;
+    s->optimal += search_fast_path_cost() == true_optimum();
+    s->consistent += map_matches_truth();
+    s->blocked += sim_stats.blocked;
+    s->crashes += sim_stats.crashes;
+    s->search_actions += sim_stats.actions;
+    s->search_cells += sim_stats.forward_cells;
+    s->search_senses += sim_stats.senses;
+    s->search_stops += sim_stats.stops;
+    s->search_seconds += sim_stats.seconds;
+    if(sim_stats.decide_pops_max > s->decide_pops_max) s->decide_pops_max = sim_stats.decide_pops_max;
+    if(r != RUN_OK || !home) return;
+
+    CHECK_EQ(storage_load(), STORAGE_LOADED);   // the search saved its map
+    sim_reset(noise, seed ^ 0x9E3779B9u);
+    sim_side_doubt(doubt);
+    r = search_fast_run(1);
+    if(r == RUN_OK) s->fast_ok++;
+    s->back_home += sim_x == START_X && sim_y == START_Y && sim_h == NORTH && search_ready();
+    s->blocked += sim_stats.blocked;
+    s->crashes += sim_stats.crashes;
+    s->fast_cells += sim_stats.forward_cells;
+    s->fast_curves += sim_stats.curves;
+    s->fast_turns += sim_stats.quarter_turns;
+    // The speed run and its return: at most one in-place turn per leg, at its start.
+    CHECK(sim_stats.paths > 0);
+}
+
+static void test_competition_mazes(void){
+    printf("simulation (16x16, goal (7,7)-(8,8)):\n");
+    maze_set_goal(7, 7, 8, 8);
+    // `goal`: the centre as in competition, open inside with one entrance.
+    const struct { const char *name; uint16_t openings; double noise, doubt; uint8_t goal; } suites[] = {
+        {"perfect mazes", 0, 0.0, 0.0, 0},
+        {"mazes with loops", 40, 0.0, 0.0, 0},
+        {"open mazes (many loops)", 150, 0.0, 0.0, 0},
+        {"loops + 20% doubtful sides", 40, 0.0, 0.2, 0},
+        {"loops + 1% sensor noise", 40, 0.01, 0.0, 0},
+        {"loops + 3% sensor noise", 40, 0.03, 0.0, 0},
+        {"perfect, competition goal", 0, 0.0, 0.0, 1},
+        {"loops, competition goal", 40, 0.0, 0.0, 1},
+        {"loops, comp. goal, 3% noise", 40, 0.03, 0.0, 1},
+    };
+    for(size_t i = 0; i < sizeof(suites) / sizeof(suites[0]); i++){
+        summary_t s = {0};
+        for(uint32_t m = 1; m <= 100; m++){
+            truth_generate(m * 2654435761u + (uint32_t)i, suites[i].openings);
+            if(suites[i].goal) truth_competition_goal(m);
+            run_cycle(&s, suites[i].noise, m + 1000u * (uint32_t)i, suites[i].doubt);
+        }
+        print_summary(suites[i].name, &s);
+        if(suites[i].doubt > 0.0){
+            // Doubtful readings only withhold information: never a wrong belief, never a crash.
+            CHECK_EQ(s.search_ok, s.runs);
+            CHECK_EQ(s.consistent, s.runs);
+            CHECK_EQ(s.fast_ok, s.runs);
+            CHECK_EQ(s.crashes, 0);
+        }
+        else if(suites[i].noise == 0.0){
+            // Perfect sensing: everything must work every time.
+            CHECK_EQ(s.search_ok, s.runs);
+            CHECK_EQ(s.consistent, s.runs);
+            CHECK_EQ(s.optimal, s.runs);
+            CHECK_EQ(s.fast_ok, s.runs);
+            CHECK_EQ(s.back_home, s.runs);
+            CHECK_EQ(s.blocked, 0);
+            CHECK_EQ(s.crashes, 0);
+        }
+        else{
+            // Noisy sensing: the robot must still finish and never lose itself.
+            CHECK(s.search_ok >= s.runs * 95 / 100);
+            CHECK(s.fast_ok >= s.search_ok * 95 / 100);
+            CHECK_EQ(s.crashes, 0);
+        }
+    }
+    maze_set_goal(GOAL_X0, GOAL_Y0, GOAL_X1, GOAL_Y1);
+}
+
+// A front reading at rest that only one sensor makes is not recorded: the search still ends with the right map.
+static void test_front_doubt(void){
+    maze_set_goal(1, 0, 1, 0);
+    truth_reset(0);
+    truth_set_wall(0, 0, NORTH, 1);
+    maze_init();
+    params_reset();
+    sim_reset(0.0, 1);
+    sim_front_doubt(1.0);
+    sim_abort_after(1);     // the turn towards the goal
+    search_set_home();
+    CHECK(search_explore() != RUN_OK);
+    CHECK_EQ(maze_evidence(0, 0, NORTH), 0);    // not "seen open"
+
+    maze_set_goal(7, 7, 8, 8);
+    summary_t s = {0};
+    for(uint32_t m = 1; m <= 30; m++){
+        truth_generate(m * 2654435761u + 7u, 40);
+        truth_competition_goal(m);
+        maze_init();
+        params_reset();
+        fake_flash_wipe();
+        sim_reset(0.0, m);
+        sim_front_doubt(0.3);
+        search_set_home();
+        s.runs++;
+        s.search_ok += search_explore() == RUN_OK && search_ready();
+        s.consistent += map_matches_truth();
+        s.optimal += search_fast_path_cost() == true_optimum();
+        s.crashes += sim_stats.crashes;
+    }
+    printf("30%% doubtful fronts at rest: search ok %d, map ok %d, optimal %d of %d\n", s.search_ok, s.consistent,
+           s.optimal, s.runs);
+    CHECK_EQ(s.search_ok, s.runs);
+    CHECK_EQ(s.consistent, s.runs);
+    CHECK_EQ(s.optimal, s.runs);
+    CHECK_EQ(s.crashes, 0);
+    maze_set_goal(GOAL_X0, GOAL_Y0, GOAL_X1, GOAL_Y1);
+}
+
+// Both ways the search moves on the same mazes: straight legs, the same verified optimum, fewer stops.
+static void test_search_modes(void){
+    maze_set_goal(7, 7, 8, 8);
+    const uint16_t openings[] = {0, 40, 150};
+    for(size_t o = 0; o < 3; o++){
+        double seconds[2] = {0};
+        long cells[2] = {0}, stops[2] = {0};
+        int ok[2] = {0};
+        for(uint8_t mode = 0; mode < 2; mode++){
+            for(uint32_t m = 1; m <= 30; m++){
+                truth_generate(m * 7919u + (uint32_t)o, openings[o]);
+                maze_init();
+                params_reset();
+                fake_flash_wipe();
+                sim_reset(0.0, m);
+                search_set_home();
+                search_set_mode((search_mode_t)mode);
+                ok[mode] += search_explore() == RUN_OK && search_fast_path_cost() == true_optimum();
+                seconds[mode] += sim_stats.seconds;
+                cells[mode] += sim_stats.forward_cells;
+                stops[mode] += sim_stats.stops;
+                CHECK_EQ(sim_stats.blocked + sim_stats.crashes + sim_stats.wall_stops, 0);
+            }
+        }
+        printf("search, %3u openings: stopping in every cell %.1f s (%ld stops), straight legs %.1f s (%ld stops),"
+               " %ld/%ld cells\n", openings[o], seconds[0] / 30, stops[0] / 30, seconds[1] / 30, stops[1] / 30,
+               cells[1] / 30, cells[0] / 30);
+        CHECK_EQ(ok[0], 30);
+        CHECK_EQ(ok[1], 30);
+        CHECK_EQ(cells[1], cells[0]);
+        CHECK(seconds[1] < seconds[0] && stops[1] < 0.75 * stops[0]);
+    }
+    search_set_mode(SEARCH_STRAIGHTS);
+    maze_set_goal(GOAL_X0, GOAL_Y0, GOAL_X1, GOAL_Y1);
+}
+
+// Both hands, stopping in every cell and on straight legs: past the goal they follow the wall until STOP.
+static void test_wall_followers(void){
+    maze_set_goal(7, 7, 8, 8);
+    int ok[2] = {0}, runs = 0;
+    long cells[2] = {0}, stops[2] = {0};
+    for(uint8_t mode = 0; mode < 2; mode++){
+        search_set_mode((search_mode_t)mode);
+        for(uint32_t m = 1; m <= 40; m++){
+            truth_generate(m * 40503u, 0);     // perfect maze: wall following reaches every cell
+            for(uint8_t left = 0; left < 2; left++){
+                maze_init();
+                sim_reset(0.0, m);
+                sim_abort_after_cells(600);
+                runs += mode == 0;
+                run_result_t r = search_wall_follow(left);
+                ok[mode] += r == RUN_ABORTED && sim_stats.goal_signals == 1 && sim_stats.forward_cells >= 600
+                            && sim_stats.crashes == 0 && sim_stats.blocked == 0 && sim_stats.wall_stops == 0;
+                cells[mode] += sim_stats.forward_cells;
+                stops[mode] += sim_stats.stops;
+            }
+        }
+    }
+    printf("wall followers: %d/%d past the goal to STOP stopping in every cell (%ld stops), %d/%d on straight"
+           " legs (%ld stops), %ld/%ld cells\n", ok[0], runs, stops[0], ok[1], runs, stops[1], cells[1], cells[0]);
+    CHECK_EQ(ok[0], runs);
+    CHECK_EQ(ok[1], runs);
+    CHECK(stops[1] < stops[0] && cells[1] >= cells[0]);
+    search_set_mode(SEARCH_STRAIGHTS);
+    maze_set_goal(GOAL_X0, GOAL_Y0, GOAL_X1, GOAL_Y1);
+}
+
+static void test_practice_maze(void){
+    printf("simulation (4x3 practice maze, goal (3,2)):\n");
+    maze_set_goal(3, 2, 3, 2);
+    summary_t s = {0};
+    for(uint32_t m = 0; m < 60; m++){
+        truth_reset(1);
+        // A random spanning tree inside x<4, y<3, plus the old flood test's layout.
+        if(m == 0){
+            for(uint8_t x = 0; x < 4; x++)
+                for(uint8_t y = 0; y < 3; y++){
+                    if(x < 3) truth_set_wall(x, y, EAST, 0);
+                    if(y < 2) truth_set_wall(x, y, NORTH, 0);
+                }
+            truth_set_wall(1, 1, EAST, 1);
+            truth_set_wall(1, 2, EAST, 1);
+            truth_set_wall(0, 0, EAST, 1);
+        }
+        else{
+            uint8_t seen[4][3] = {{0}};
+            uint8_t sx[12], sy[12];
+            int top = 0;
+            sx[0] = 0; sy[0] = 0; seen[0][0] = 1;
+            srand(m);
+            while(top >= 0){
+                uint8_t x = sx[top], y = sy[top];
+                heading_t opts[4];
+                int n = 0;
+                for(int h = 0; h < 4; h++){
+                    int nx = x + heading_dx((heading_t)h), ny = y + heading_dy((heading_t)h);
+                    if(nx < 0 || ny < 0 || nx >= 4 || ny >= 3 || seen[nx][ny]) continue;
+                    if(x == 0 && y == 0 && h == EAST) continue;
+                    opts[n++] = (heading_t)h;
+                }
+                if(!n){ top--; continue; }
+                heading_t h = opts[rand() % n];
+                truth_set_wall(x, y, h, 0);
+                x = (uint8_t)(x + heading_dx(h));
+                y = (uint8_t)(y + heading_dy(h));
+                seen[x][y] = 1;
+                top++;
+                sx[top] = x; sy[top] = y;
+            }
+            if(m % 2){  // some loops
+                truth_set_wall((uint8_t)(1 + rand() % 2), (uint8_t)(rand() % 2), NORTH, 0);
+            }
+        }
+        run_cycle(&s, 0.0, m + 77u, 0.0);
+    }
+    print_summary("practice mazes", &s);
+    CHECK_EQ(s.search_ok, s.runs);
+    CHECK_EQ(s.optimal, s.runs);
+    CHECK_EQ(s.consistent, s.runs);
+    CHECK_EQ(s.fast_ok, s.runs);
+    CHECK_EQ(s.crashes + s.blocked, 0);
+    maze_set_goal(GOAL_X0, GOAL_Y0, GOAL_X1, GOAL_Y1);
+}
+
+static void test_run_control(void){
+    maze_set_goal(7, 7, 8, 8);
+    truth_generate(12345u, 30);
+
+    // No verified path: the speed run refuses without moving.
+    maze_init();
+    sim_reset(0.0, 1);
+    search_set_home();
+    CHECK_EQ(search_fast_run(1), RUN_FAILED);
+    CHECK_EQ(sim_stats.actions, 0);
+    CHECK(search_ready());
+
+    // STOP in the middle of a search.
+    maze_init();
+    fake_flash_wipe();
+    sim_reset(0.0, 1);
+    sim_abort_after(15);
+    CHECK_EQ(search_explore(), RUN_ABORTED);
+    CHECK(!search_ready());
+    CHECK_EQ(storage_load(), STORAGE_EMPTY);    // nothing half-done was saved
+
+    // STOP on the way back: the map was saved at the goal.
+    maze_init();
+    fake_flash_wipe();
+    sim_reset(0.0, 1);
+    CHECK_EQ(search_explore(), RUN_OK);
+    const uint32_t actions = sim_stats.actions;
+    const uint16_t path_cost = search_fast_path_cost();
+    maze_init();
+    fake_flash_wipe();
+    sim_reset(0.0, 1);
+    sim_abort_after(actions - 1);
+    CHECK_EQ(search_explore(), RUN_ABORTED);
+    maze_init();
+    CHECK_EQ(storage_load(), STORAGE_LOADED);
+    CHECK(path_cost != PLAN_INF);
+    CHECK(search_fast_path_cost() != PLAN_INF);     // at least the way it drove
+
+    // A race stopped at its goal (its route is one leg): the map as it was, nothing written.
+    maze_init();
+    sim_reset(0.0, 1);
+    CHECK_EQ(search_explore(), RUN_OK);
+    const int programs = fake_flash_programs;
+    sim_reset(0.0, 1);
+    search_set_home();
+    sim_abort_after_cells(1);
+    CHECK_EQ(search_fast_run(1), RUN_ABORTED);
+    CHECK(maze_is_goal(sim_x, sim_y));
+    CHECK_EQ(fake_flash_programs, programs);
+    CHECK_EQ(search_fast_path_cost(), path_cost);
+
+    // A phantom wall sealing off the goal is repaired, not fatal.
+    maze_init();
+    sim_reset(0.0, 2);
+    for(uint8_t x = 6; x <= 9; x++){
+        maze_observe(x, 6, NORTH, 1);
+        maze_observe(x, 9, SOUTH, 1);
+    }
+    for(uint8_t y = 7; y <= 8; y++){
+        maze_observe(6, y, EAST, 1);
+        maze_observe(9, y, WEST, 1);
+    }
+    for(uint8_t x = 7; x <= 8; x++){
+        maze_observe(x, 7, SOUTH, 1);
+        maze_observe(x, 8, NORTH, 1);
+        maze_mark_blocked(x, 7, SOUTH);
+        maze_mark_blocked(x, 8, NORTH);
+    }
+    for(uint8_t y = 7; y <= 8; y++){
+        maze_mark_blocked(7, y, WEST);
+        maze_mark_blocked(8, y, EAST);
+    }
+    CHECK_EQ(search_explore(), RUN_OK);
+    CHECK(map_matches_truth());
+    CHECK_EQ(sim_stats.crashes, 0);
+    maze_set_goal(GOAL_X0, GOAL_Y0, GOAL_X1, GOAL_Y1);
+}
+
+// 1 if a race that could not go on left the map and the store as they were, the robot not ready.
+static int race_lost_nothing(run_result_t r, const maze_snapshot_t *before, int programs){
+    maze_snapshot_t after;
+    maze_export(&after);
+    return r == RUN_FAILED && !search_ready() && sim_stats.blocked == 1 && sim_stats.crashes == 0
+        && memcmp(before, &after, sizeof(after)) == 0 && fake_flash_programs == programs;
+}
+
+// A wall on the verified route (the maze changed, or the robot is not where it thinks): the race stops at the cell
+// before it and ends; map and store untouched; with the wall gone the next race runs.
+static void test_fast_run_surprise_wall(void){
+    maze_set_goal(7, 7, 8, 8);
+    cellset_t goal;
+    maze_goal_cells(&goal);
+    int runs = 0, ok = 0;
+    for(uint32_t m = 1; m <= 30; m++){
+        truth_generate(m * 7919u, 60);
+        maze_init();
+        params_reset();
+        fake_flash_wipe();
+        sim_reset(0.0, m);
+        search_set_home();
+        if(search_explore() != RUN_OK) continue;
+        maze_plan_to(&goal, PLAN_VERIFIED, FAST, cost);
+        int8_t turn, turns[PATH_MAX_CELLS];
+        uint8_t cells, x = START_X, y = START_Y;
+        maze_route(cost, x, y, NORTH, PLAN_VERIFIED, FAST, &turn, turns, PATH_MAX_CELLS, &cells);
+        heading_t h = (heading_t)((NORTH + turn + 4) & 3);
+        // The passage out of the second straight cell in a row.
+        uint8_t placed = 0;
+        for(uint8_t i = 0; i < cells && !placed; i++){
+            if(i >= 2 && !turns[i - 1] && !turns[i - 2]){
+                truth_set_wall(x, y, h, 1);
+                placed = 1;
+                break;
+            }
+            x = (uint8_t)(x + heading_dx(h));
+            y = (uint8_t)(y + heading_dy(h));
+            h = (heading_t)((h + turns[i] + 4) & 3);
+        }
+        if(!placed) continue;
+        runs++;
+        maze_snapshot_t before;
+        maze_export(&before);
+        const int programs = fake_flash_programs;
+        sim_reset(0.0, m + 1u);
+        int good = race_lost_nothing(search_fast_run(1), &before, programs) && sim_x == x && sim_y == y;
+        truth_set_wall(x, y, h, 0);
+        sim_reset(0.0, m + 2u);
+        search_set_home();
+        good = good && search_fast_run(1) == RUN_OK && sim_x == START_X && sim_y == START_Y && search_ready();
+        ok += good;
+        if(!good) printf("  wall on the route, maze %u: blocked %u crashes %u\n", m, sim_stats.blocked, sim_stats.crashes);
+    }
+    printf("races with a wall on the verified route: %d/%d ended there, map and store untouched\n", ok, runs);
+    CHECK(runs >= 10);
+    CHECK_EQ(ok, runs);
+    maze_set_goal(GOAL_X0, GOAL_Y0, GOAL_X1, GOAL_Y1);
+}
+
+// A race that stops blocked with nothing there (a yawed robot braking at a side wall, as on the robot 2026-09-26):
+// on the way out or on the way back it ends there and writes nothing; the next race runs.
+static void test_race_false_block(void){
+    maze_set_goal(7, 7, 8, 8);
+    int runs = 0, ok = 0;
+    for(uint32_t m = 1; m <= 10; m++){
+        truth_generate(m * 7919u, 40);
+        truth_competition_goal(m);
+        maze_init();
+        params_reset();
+        fake_flash_wipe();
+        sim_reset(0.0, m);
+        search_set_home();
+        if(search_explore() != RUN_OK) continue;
+        maze_snapshot_t before;
+        maze_export(&before);
+        const int programs = fake_flash_programs;
+        for(uint32_t path = 1; path <= 2; path++){     // the leg out of the start, the leg out of the goal
+            runs++;
+            sim_reset(0.0, m + path);
+            sim_false_block(path);
+            search_set_home();
+            int good = race_lost_nothing(search_fast_run(1), &before, programs)
+                    && (path == 1 ? sim_x == START_X && sim_y == START_Y : maze_is_goal(sim_x, sim_y));
+            sim_reset(0.0, m + 10u);
+            search_set_home();
+            good = good && search_fast_run(1) == RUN_OK && search_ready();
+            ok += good;
+            if(!good) printf("  false block, maze %u, path %u\n", m, path);
+        }
+    }
+    printf("races blocked with nothing there: %d/%d ended there, map and store untouched\n", ok, runs);
+    CHECK(runs >= 10);
+    CHECK_EQ(ok, runs);
+    maze_set_goal(GOAL_X0, GOAL_Y0, GOAL_X1, GOAL_Y1);
+}
+
+// A search leg that brakes and backs up without leaving the cell it turned in: the sides at rest are still not
+// recorded as walls (stopped after a turn the beams catch posts).
+static void test_blocked_leg_keeps_turned(void){
+    maze_set_goal(1, 1, 1, 1);
+    truth_reset(0);
+    truth_set_wall(0, 1, NORTH, 1);
+    maze_init();
+    params_reset();
+    sim_reset(0.0, 1);
+    sim_false_block(2);     // the leg east out of (0,1), right after the turn
+    sim_abort_after(4);     // leg, turn, blocked leg, the turn away: stop there
+    search_set_home();
+    CHECK(search_explore() != RUN_OK);
+    CHECK(sim_x == 0 && sim_y == 1);
+    CHECK_EQ(sim_stats.legs, 2);
+    CHECK_EQ(maze_evidence(0, 1, EAST), 1);     // blocked (2), then seen open at rest
+    CHECK_EQ(maze_evidence(0, 1, NORTH), 2);    // seen on the way in and in front; not again as a side at rest
+    maze_set_goal(GOAL_X0, GOAL_Y0, GOAL_X1, GOAL_Y1);
+}
+
+// Race 2.3: the verified route with turns in place, there and back, home and ready.
+static void test_fast_run_no_curves(void){
+    maze_set_goal(7, 7, 8, 8);
+    int runs = 0, ok = 0;
+    for(uint32_t m = 1; m <= 20; m++){
+        truth_generate(m * 104729u, 40);
+        maze_init();
+        params_reset();
+        fake_flash_wipe();
+        sim_reset(0.0, m);
+        search_set_home();
+        if(search_explore() != RUN_OK) continue;
+        runs++;
+        sim_reset(0.0, m + 1u);
+        const run_result_t r = search_fast_run(0);
+        const int good = r == RUN_OK && sim_stats.curves == 0 && sim_stats.crashes == 0 && sim_stats.quarter_turns > 0
+                      && sim_x == START_X && sim_y == START_Y && sim_h == NORTH && search_ready();
+        ok += good;
+        if(!good) printf("  no curves, maze %u: result %d curves %u crashes %u\n", m, r, sim_stats.curves,
+                         sim_stats.crashes);
+    }
+    printf("speed runs without curves: %d/%d there and back\n", ok, runs);
+    CHECK(runs >= 10);
+    CHECK_EQ(ok, runs);
+    maze_set_goal(GOAL_X0, GOAL_Y0, GOAL_X1, GOAL_Y1);
+}
+
+// A race at CURVE 480 goes back with the safe race's curves: the return is not timed and the map is saved.
+static void test_race_return_curves(void){
+    maze_set_goal(7, 7, 8, 8);
+    int runs = 0, ok = 0;
+    for(uint32_t m = 1; m <= 10; m++){
+        truth_generate(m * 7919u, 40);
+        maze_init();
+        params_reset();
+        fake_flash_wipe();
+        sim_reset(0.0, m);
+        search_set_home();
+        if(search_explore() != RUN_OK) continue;
+        runs++;
+        params.curve_speed = 480;
+        sim_reset(0.0, m + 1u);
+        const run_result_t r = search_fast_run(1);
+        const int good = r == RUN_OK && sim_stats.curve_speed_max == 480 && sim_stats.curve_speed_last == FAST_SAFE_CURVE
+                      && sim_x == START_X && sim_y == START_Y && search_ready();
+        ok += good;
+        if(!good) printf("  return curves, maze %u: result %d max %d last %d\n", m, r, sim_stats.curve_speed_max,
+                         sim_stats.curve_speed_last);
+    }
+    printf("races at CURVE 480 back at %d: %d/%d\n", FAST_SAFE_CURVE, ok, runs);
+    CHECK(runs >= 5);
+    CHECK_EQ(ok, runs);
+    maze_set_goal(GOAL_X0, GOAL_Y0, GOAL_X1, GOAL_Y1);
+}
+
+// --demo: one full cycle on the practice layout, with the firmware's log and map.
+static void demo(void){
+    host_verbose = 1;
+    maze_set_goal(3, 2, 3, 2);
+    truth_reset(1);
+    for(uint8_t x = 0; x < 4; x++){
+        for(uint8_t y = 0; y < 3; y++){
+            if(x < 3) truth_set_wall(x, y, EAST, 0);
+            if(y < 2) truth_set_wall(x, y, NORTH, 0);
+        }
+    }
+    truth_set_wall(1, 1, EAST, 1);
+    truth_set_wall(1, 2, EAST, 1);
+    truth_set_wall(0, 0, EAST, 1);
+    maze_init();
+    params.log_level = 1;
+    sim_reset(0.0, 1);
+    search_set_home();
+    search_explore();
+    search_print_map();
+    sim_reset(0.0, 2);
+    search_fast_run(1);
+    search_print_map();
+}
+
+// --transcript <seed> <openings> [practice]: all the robot would send over Bluetooth ('#' lines are markers).
+static void practice_truth(uint32_t seed, uint16_t openings){
+    uint8_t seen[4][3] = {{0}};
+    uint8_t sx[12], sy[12];
+    int top = 0;
+    truth_reset(1);
+    srand(seed);
+    sx[0] = 0;
+    sy[0] = 0;
+    seen[0][0] = 1;
+    while(top >= 0){
+        uint8_t x = sx[top], y = sy[top];
+        heading_t options[4];
+        int n = 0;
+        for(int h = 0; h < 4; h++){
+            int nx = x + heading_dx((heading_t)h), ny = y + heading_dy((heading_t)h);
+            if(nx < 0 || ny < 0 || nx >= 4 || ny >= 3 || seen[nx][ny]) continue;
+            if(x == 0 && y == 0 && h == EAST) continue;
+            options[n++] = (heading_t)h;
+        }
+        if(!n){
+            top--;
+            continue;
+        }
+        heading_t h = options[rand() % n];
+        truth_set_wall(x, y, h, 0);
+        x = (uint8_t)(x + heading_dx(h));
+        y = (uint8_t)(y + heading_dy(h));
+        seen[x][y] = 1;
+        top++;
+        sx[top] = x;
+        sy[top] = y;
+    }
+    for(uint16_t i = 0; i < openings; i++){
+        uint8_t x = (uint8_t)(rand() % 4), y = (uint8_t)(rand() % 3);
+        if(x < 3 && !(x == 0 && y == 0) && rand() % 2) truth_set_wall(x, y, EAST, 0);
+        else if(y < 2) truth_set_wall(x, y, NORTH, 0);
+    }
+}
+
+// Walls believed around the goal before starting: forces the map repair (telemetry resends the map).
+static void phantom_walls(void){
+    uint8_t g[4];
+    maze_get_goal(g);
+    for(uint8_t x = g[0]; x <= g[2]; x++){
+        maze_mark_blocked(x, g[1], SOUTH);
+        maze_mark_blocked(x, g[3], NORTH);
+    }
+    for(uint8_t y = g[1]; y <= g[3]; y++){
+        maze_mark_blocked(g[0], y, WEST);
+        maze_mark_blocked(g[2], y, EAST);
+    }
+}
+
+// A leg finds the goal sealed off by phantom walls: the robot stops and repairs the map at rest, never on the way.
+static void test_repair_at_rest(void){
+    maze_set_goal(7, 7, 8, 8);
+    truth_reset(0);
+    truth_set_wall(7, 7, SOUTH, 1);     // the entrance the map left
+    maze_init();
+    phantom_walls();
+    maze_mark_crossed(7, 7, SOUTH);     // believed open
+    sim_reset(0.0, 1);
+    search_set_home();
+    CHECK_EQ(search_explore(), RUN_OK);
+    CHECK_EQ(sim_stats.decide_waits, 0);
+    CHECK(maze_wall(7, 7, SOUTH) == WALL_PRESENT);
+    maze_set_goal(GOAL_X0, GOAL_Y0, GOAL_X1, GOAL_Y1);
+}
+
+// Repairs forget firmer walls each time. Forgetting only the walls seen once looped: it opened a way through real
+// walls, seen again in passing, and the phantom seen twice that sealed the goal stayed (14 searches in 6000 at 3% noise).
+static void test_repair_escalates(void){
+    maze_set_goal(7, 7, 8, 8);
+    const uint32_t mazes[] = {1211, 1480, 2274};    // failed "target unreachable" after 3 repairs
+    for(size_t i = 0; i < sizeof(mazes) / sizeof(mazes[0]); i++){
+        truth_generate(mazes[i] * 2654435761u, 40);
+        truth_competition_goal(mazes[i]);
+        maze_init();
+        params_reset();
+        fake_flash_wipe();
+        sim_reset(0.03, mazes[i]);
+        search_set_home();
+        CHECK_EQ(search_explore(), RUN_OK);
+        CHECK(search_ready());
+    }
+    maze_set_goal(GOAL_X0, GOAL_Y0, GOAL_X1, GOAL_Y1);
+}
+
+static void transcript(uint32_t seed, uint16_t openings, int practice, int phantom){
+    host_verbose = 1;
+    if(practice){
+        maze_set_goal(3, 2, 3, 2);
+        practice_truth(seed, openings);
+    }
+    else{
+        maze_set_goal(7, 7, 8, 8);
+        truth_generate(seed, openings);
+    }
+    maze_init();
+    if(phantom) phantom_walls();
+    params_reset();
+    params.log_level = 1;
+    fake_flash_wipe();
+    sim_reset(0.0, seed);
+    search_set_home();
+    telemetry_sync(1, TM_COUNTDOWN, 0, 0, NORTH);
+    run_result_t r = search_explore();
+    telemetry_activity(TM_IDLE);
+    printf("#RESULT search %d\n#CHECK\n", (int)r);
+    telemetry_sync(1, TM_IDLE, sim_x, sim_y, sim_h);
+    if(r != RUN_OK) return;
+    sim_reset(0.0, seed + 1);
+    telemetry_sync(2, TM_COUNTDOWN, 0, 0, NORTH);
+    r = search_fast_run(1);
+    telemetry_activity(TM_IDLE);
+    printf("#RESULT fast %d\n#CHECK\n", (int)r);
+    telemetry_sync(2, TM_IDLE, sim_x, sim_y, sim_h);
+}
+
+// ---- Speed control ------------------------------------------------------------------
+
+static void test_profile(void){
+    profile_t p;
+    profile_reset(&p);
+    // Triangle (never reaches top), then trapezoid: exact arrival at rest.
+    const float cases[][3] = {{50.0f, 1000.0f, 3000.0f}, {540.0f, 700.0f, 3000.0f}, {-90.0f, 500.0f, 5000.0f}};
+    for(size_t i = 0; i < sizeof(cases) / sizeof(cases[0]); i++){
+        profile_reset(&p);
+        profile_start(&p, cases[i][0], cases[i][1], 0.0f, cases[i][2]);
+        float vmax = 0.0f, amax = 0.0f, alast = 0.0f;
+        int steps = 0;
+        while(p.active && steps < 10000){
+            profile_step(&p, 0.001f);
+            vmax = fmaxf(vmax, fabsf(p.speed));
+            if(p.active) amax = fmaxf(amax, fabsf(p.accel));
+            else alast = fabsf(p.accel);
+            steps++;
+        }
+        CHECK(!p.active);
+        CHECK(p.pos == cases[i][0]);
+        CHECK(p.speed == 0.0f);
+        CHECK(vmax <= cases[i][1] + 0.01f);
+        CHECK(amax <= cases[i][2] * 1.01f);
+        // The last step drops the few mm/s left to zero at once.
+        CHECK(alast <= cases[i][2] * 3.0f);
+        // No slower than the ideal time plus a few ms.
+        const float d = fabsf(cases[i][0]), v = cases[i][1], a = cases[i][2];
+        const float ideal = d > v * v / a ? d / v + v / a : 2.0f * sqrtf(d / a);
+        CHECK(steps < (int)(ideal * 1000.0f) + 10);
+    }
+
+    // The target moves closer mid-way (front wall): never reverses, stops there.
+    profile_reset(&p);
+    profile_start(&p, 180.0f, 500.0f, 0.0f, 3000.0f);
+    float last = 0.0f;
+    uint8_t forward_only = 1;
+    for(int i = 0; i < 5000 && p.active; i++){
+        if(i == 300) p.target = p.pos + 30.0f;
+        profile_step(&p, 0.001f);
+        forward_only &= p.pos >= last;
+        last = p.pos;
+    }
+    CHECK(forward_only);
+    CHECK(!p.active);
+    CHECK(p.pos == p.target);
+
+    // Resume after a pause: from standstill at the given position.
+    profile_reset(&p);
+    profile_start(&p, 100.0f, 300.0f, 0.0f, 2000.0f);
+    for(int i = 0; i < 200; i++) profile_step(&p, 0.001f);
+    profile_resume(&p, 60.0f);
+    CHECK(p.speed == 0.0f);
+    CHECK(p.active);
+    for(int i = 0; i < 5000 && p.active; i++) profile_step(&p, 0.001f);
+    CHECK(p.pos == 100.0f);
+}
+
+static void test_steering_pd(void){
+    const steer_config_t k = {
+        .kp = 10.0f, .kd = 1.0f, .track_mm = SIDE_WALL_TRACK_MM, .center_l_mm = 84.0f, .center_r_mm = 84.0f,
+        .error_max_mm = STEER_ERROR_MAX_MM, .jump_mm = STEER_JUMP_MM, .hold_mm = STEER_HOLD_MM, .average_steps = 1,
+    };
+    const float dt = 0.001f, ds = 0.5f;     // 500 mm/s
+    const int hold_steps = (int)(STEER_HOLD_MM / ds);
+    steer_t s;
+    steer_reset(&s);
+    // Centred between both walls: no turn.
+    for(int i = 0; i < 100; i++) steer_step(&s, &k, 84.0f, 84.0f, dt, ds, 1.0f);
+    CHECK(fabsf(s.heading) < 0.01f);
+    // Starting 10 mm left of the centre: KP * 10 deg/s to the right, no derivative on the first reading.
+    steer_reset(&s);
+    for(int i = 0; i < 100; i++) steer_step(&s, &k, 74.0f, 94.0f, dt, ds, 1.0f);
+    CHECK(fabsf(s.heading - k.kp * 10.0f * 0.1f) < 0.02f);
+    // No walls: the heading is held.
+    const float held = s.heading;
+    for(int i = 0; i < 100; i++) steer_step(&s, &k, 250.0f, 250.0f, dt, ds, 1.0f);
+    CHECK(fabsf(s.heading - held) < 0.001f);
+    // A wall appearing counts once it read steady over STEER_HOLD_MM (the jump spans 2 ms), then without a derivative kick.
+    for(int i = 0; i <= hold_steps; i++) steer_step(&s, &k, 60.0f, 250.0f, dt, ds, 1.0f);
+    CHECK(fabsf(s.heading - held) < 0.001f && s.wall == STEER_WALL_NONE);
+    steer_step(&s, &k, 60.0f, 250.0f, dt, ds, 1.0f);
+    CHECK(fabsf(s.heading - held - k.kp * 24.0f * dt) < 0.01f && s.wall == STEER_WALL_LEFT);
+    // The error clamped; gain 0 (a move's end): no change.
+    const float before = s.heading;
+    for(int i = 0; i < 100; i++) steer_step(&s, &k, 10.0f, 250.0f, dt, ds, 0.0f);
+    CHECK(fabsf(s.heading - before) < 0.001f);
+    // The D term: the error growing 1 mm turns KD deg more.
+    steer_reset(&s);
+    steer_step(&s, &k, 84.0f, 84.0f, dt, ds, 1.0f);
+    steer_step(&s, &k, 83.0f, 85.0f, dt, ds, 1.0f);
+    CHECK(fabsf(s.heading - (k.kd * 1.0f + k.kp * 1.0f * dt)) < 0.001f);
+    // A wall's end: the right reading jumps away and reads edges; the left wall alone keeps the heading.
+    steer_reset(&s);
+    for(int i = 0; i < 20; i++) steer_step(&s, &k, 84.0f, 84.0f, dt, ds, 1.0f);
+    const float edge[6] = {120.0f, 121.0f, 125.0f, 70.0f, 71.0f, 118.0f};
+    for(int i = 0; i < 60; i++) steer_step(&s, &k, 84.0f, edge[i / 10], dt, ds, 1.0f);
+    CHECK(fabsf(s.heading) < 0.001f && s.wall == STEER_WALL_LEFT);
+    // A side in use may close in fast (a crooked start straightening): it keeps counting.
+    steer_reset(&s);
+    for(int i = 0; i < 40; i++) steer_step(&s, &k, 84.0f, 120.0f - (float)i, dt, ds, 1.0f);
+    CHECK(s.wall == STEER_WALL_BOTH);
+}
+
+static void test_speed_control(void){
+    // Nominal robot, off-centre: exact distance, centred, no weaving, at search and speed-run speeds.
+    const float speeds[] = {300.0f, 500.0f, 800.0f};
+    for(size_t i = 0; i < sizeof(speeds) / sizeof(speeds[0]); i++){
+        plant_t p = plant_nominal();
+        p.y0 = 8.0f;
+        sim_result_t r = sim_straight(&p, 540.0f, speeds[i], 3000.0f, PARAM_KP, PARAM_KD);
+        CHECK(fabsf(r.travelled - 540.0f) < 1.0f);
+        CHECK(r.fwd_err_max < 5.0f);
+        CHECK(r.rot_err_max < 6.0f);
+        CHECK(r.y_late < 3.0f);     // the side IR resolve ~2 mm
+        p.y0 = 15.0f;               // a bad start: centred within the move
+        r = sim_straight(&p, 540.0f, speeds[i], 3000.0f, PARAM_KP, PARAM_KD);
+        CHECK(fabsf(r.y_end) < 3.0f);
+        CHECK(r.crossings <= 4);   // also counts +-0.5 mm wobbles at the centre
+        CHECK(fabsf(r.yaw_end) < 2.0f);
+        CHECK(r.ms < 3000);
+    }
+    // Model off by 20 % either way, slower motors, more friction and dead time.
+    const plant_t base = plant_nominal();
+    plant_t variants[5];
+    for(int i = 0; i < 5; i++) variants[i] = base;
+    variants[0].gain_l = variants[0].gain_r = 0.8f;
+    variants[1].gain_l = variants[1].gain_r = 1.2f;
+    variants[2].tau = 0.08f;
+    variants[3].friction = 40.0f;
+    variants[3].stiction = 160.0f;
+    variants[4].dead_ms = 6;    // measured: none
+    for(int i = 0; i < 5; i++){
+        variants[i].y0 = 10.0f;
+        sim_result_t r = sim_straight(&variants[i], 540.0f, 600.0f, 3000.0f, PARAM_KP, PARAM_KD);
+        CHECK(fabsf(r.travelled - 540.0f) < 1.5f);
+        CHECK(r.y_late < 5.0f);
+        CHECK(r.fwd_err_max < 10.0f);
+    }
+    // Unequal motors (the right one 8 % stronger than modelled): still straight.
+    plant_t uneven = base;
+    uneven.gain_r = 1.08f;
+    sim_result_t r = sim_straight(&uneven, 900.0f, 700.0f, 3000.0f, PARAM_KP, PARAM_KD);
+    CHECK(r.y_late < 3.0f);     // 2.0 even with equal motors: IR steps and yaw friction
+    // A turn left the robot 5 deg off the corridor: the integral finds it.
+    plant_t yawed = base;
+    yawed.yaw0 = 5.0f;
+    r = sim_straight(&yawed, 540.0f, 500.0f, 3000.0f, PARAM_KP, PARAM_KD);
+    CHECK(fabsf(r.y_end) < 2.5f);
+    // Placed by hand 27 mm off and 11 deg into the wall (on the robot, 10-05, it ran the whole straight along it).
+    plant_t crooked = base;
+    crooked.y0 = 27.0f;
+    crooked.yaw0 = -11.0f;
+    crooked.wall_error_mm = 2.0f;
+    r = sim_straight(&crooked, 540.0f, 450.0f, 3000.0f, PARAM_KP, PARAM_KD);
+    CHECK(fabsf(r.y_at[3]) < 10.0f);        // the second cell's centre
+    CHECK(fabsf(r.y_end) < 3.0f);
+    // 20 deg crooked, centred: the old 15 deg clamp drove it into the wall.
+    crooked.y0 = 0.0f;
+    crooked.yaw0 = -20.0f;
+    r = sim_straight(&crooked, 540.0f, 450.0f, 3000.0f, PARAM_KP, PARAM_KD);
+    for(int i = 0; i < 5; i++) CHECK(fabsf(r.y_at[i]) < 30.0f);
+    CHECK(fabsf(r.y_end) < 3.0f);
+    // 30 deg, the tail by the right wall (10-05, 900 mm/s: it touched the left wall).
+    crooked.y0 = -38.0f;
+    crooked.yaw0 = -30.0f;
+    r = sim_straight(&crooked, 540.0f, 450.0f, 3000.0f, PARAM_KP, PARAM_KD);
+    CHECK(r.y_max < 45.0f);                 // 48: touching the wall
+    CHECK(fabsf(r.y_end) < 4.0f);
+    // 35 deg (10-05, 100 mm/s, into the wall): one beam runs along its wall, only the other is seen.
+    crooked.y0 = -30.0f;
+    crooked.yaw0 = -35.0f;
+    r = sim_straight(&crooked, 540.0f, 100.0f, 3000.0f, PARAM_KP, PARAM_KD);
+    CHECK(r.y_max < 45.0f);
+    CHECK(fabsf(r.y_end) < 4.0f);
+    // Off-centre at the start of a short straight: it ends nearly parallel.
+    plant_t off = base;
+    off.y0 = 10.0f;
+    r = sim_straight(&off, 180.0f, 450.0f, 3000.0f, PARAM_KP, PARAM_KD);
+    CHECK(fabsf(r.yaw_end) < 2.0f);
+    // A real heading error at speed-run speed: corrected.
+    yawed.yaw0 = 3.0f;
+    r = sim_straight(&yawed, 540.0f, 900.0f, 3000.0f, PARAM_KP, PARAM_KD);
+    CHECK(fabsf(r.y_end) < 3.0f);
+    CHECK(fabsf(r.yaw_end) < 2.0f);
+    // Walls a few mm off in every cell, a long straight at 900.
+    plant_t maze = base;
+    maze.y0 = 3.0f;
+    maze.wall_error_mm = 3.0f;
+    r = sim_straight(&maze, 1440.0f, 900.0f, 3000.0f, PARAM_KP, PARAM_KD);
+    CHECK(r.y_late < 5.0f);
+    // Out of PWM (flat battery at full speed): rotation keeps priority.
+    plant_t flat = base;
+    flat.gain_l = flat.gain_r = 0.7f;
+    flat.y0 = 5.0f;
+    r = sim_straight(&flat, 900.0f, 1000.0f, 3000.0f, PARAM_KP, PARAM_KD);
+    CHECK(r.y_late < 6.0f);
+    // Turns: exact angle (encoder), quick.
+    const float angles[] = {90.0f, -90.0f, 180.0f};
+    for(size_t i = 0; i < sizeof(angles) / sizeof(angles[0]); i++){
+        r = sim_turn(&base, angles[i], PARAM_TURN_SPEED, PARAM_TURN_ACCEL);
+        CHECK(fabsf(r.turned - angles[i]) < 0.5f);
+        CHECK(fabsf(r.travelled) < 1.0f);
+        CHECK(r.ms < (fabsf(angles[i]) > 90.0f ? 600u : 450u));
+    }
+}
+
+// ---- Smooth paths --------------------------------------------------------------------
+
+typedef struct {
+    double x, y;            // mm, start cell centre = origin, +y = the start heading
+    double heading;         // deg, > 0 right
+    float v_max, v_curve_max, a_max, alpha_max;
+    int steps;
+    uint8_t done;
+} ref_walk_t;
+
+// Follows a path's reference as a perfect robot would.
+static ref_walk_t walk_reference(path_run_t *r, int max_steps){
+    ref_walk_t w = {0};
+    profile_t fwd, rot;
+    profile_reset(&fwd);
+    profile_reset(&rot);
+    const double deg = 3.14159265358979 / 180.0;
+    for(w.steps = 0; w.steps < max_steps && !r->done; w.steps++){
+        const double before = rot.pos;
+        path_step(r, &fwd, &rot, CONTROL_DT_S);
+        // Real heading: the encoder angle scaled back to a real quarter turn per curve.
+        const double mid = 0.5 * (before + rot.pos) * 90.0 / r->curve.angle * deg;
+        w.x += fwd.delta * sin(mid);
+        w.y += fwd.delta * cos(mid);
+        w.v_max = fmaxf(w.v_max, fwd.speed);
+        if(rot.speed != 0.0f) w.v_curve_max = fmaxf(w.v_curve_max, fwd.speed);
+        if(!r->done) w.a_max = fmaxf(w.a_max, fabsf(fwd.accel));     // the last step drops the last mm/s at once
+        w.alpha_max = fmaxf(w.alpha_max, fabsf(rot.accel));
+    }
+    w.heading = rot.pos * 90.0 / r->curve.angle;
+    w.done = r->done;
+    return w;
+}
+
+static void test_curve_shape(void){
+    curve_t c = default_curve();
+    // Clothoid-arc-clothoid: symmetric, the same footprint along both axes (Fresnel integrals: 85.47 mm).
+    CHECK(fabsf(c.length - (CURVE_RADIUS_MM * 1.5707963f + CURVE_RAMP_MM)) < 0.01f);
+    CHECK(fabsf(c.footprint - 85.47f) < 0.05f);
+    CHECK(fabsf(c.pre - (CELL_MM / 2.0f - c.footprint)) < 0.05f);
+    CHECK(fabsf(c.pre - c.post) < 0.01f);
+    CHECK(curve_progress(&c, 0.0f) == 0.0f && curve_progress(&c, c.length) == 1.0f);
+    CHECK(fabsf(curve_progress(&c, 0.5f * c.length) - 0.5f) < 1e-5f);
+    // Nearly a pure arc: the ramps push it out by half their length; 89 with 1 mm ramps fills the cell.
+    CHECK(!curve_setup(&c, 90.0f, 1.0f, 90.0f, CELL_MM));
+    CHECK(curve_setup(&c, 89.0f, 1.0f, 90.0f, CELL_MM));
+    CHECK(fabsf(c.footprint - 89.5f) < 0.05f);
+    // Shapes that do not exist or do not fit: curves in consecutive cells would overlap.
+    CHECK(!curve_setup(&c, 70.0f, 120.0f, 90.0f, CELL_MM));     // ramps longer than the turn
+    CHECK(!curve_setup(&c, 80.0f, 60.0f, 90.0f, CELL_MM));      // footprint 111 mm
+    CHECK(!curve_setup(&c, CURVE_RADIUS_MM, 0.0f, 90.0f, CELL_MM));
+}
+
+static void test_path_reference(void){
+    const curve_t c = default_curve();
+    static const struct {
+        const char *name;
+        uint8_t cells;
+        int8_t turn[8];
+        double x, y, heading;       // where it must end: a cell centre
+    } paths[] = {
+        {"one cell", 1, {0}, 0, 180, 0},
+        {"five cells", 5, {0}, 0, 900, 0},
+        {"corner right", 2, {1, 0}, 180, 180, 90},
+        {"corner left after 3", 5, {0, 0, -1, 0, 0}, -360, 540, -90},
+        {"curve in the first cell", 2, {-1, 0}, -180, 180, -90},
+        {"staircase", 5, {1, -1, 1, -1, 0}, 360, 540, 0},
+        {"u-turn over two cells", 3, {1, 1, 0}, 180, 0, 180},
+    };
+    for(size_t i = 0; i < sizeof(paths) / sizeof(paths[0]); i++){
+        const float speeds[][2] = {{700.0f, 400.0f}, {1500.0f, 700.0f}, {300.0f, 300.0f}};
+        for(size_t k = 0; k < 3; k++){
+            const run_path_t path = {paths[i].turn, paths[i].cells};
+            path_run_t r;
+            CHECK(path_start(&r, &path, &c, CELL_MM, speeds[k][0], speeds[k][1], 3000.0f));
+            ref_walk_t w = walk_reference(&r, 20000);
+            const int ok = w.done && fabs(w.x - paths[i].x) < 0.3 && fabs(w.y - paths[i].y) < 0.3
+                        && fabs(w.heading - paths[i].heading) < 0.01;
+            if(!ok){
+                printf("  path %s at %.0f/%.0f: end (%.2f, %.2f) %.2f deg, done %d\n", paths[i].name,
+                       (double)speeds[k][0], (double)speeds[k][1], w.x, w.y, w.heading, w.done);
+            }
+            CHECK(ok);
+            CHECK(w.v_max <= speeds[k][0] + 0.01f);
+            CHECK(w.v_curve_max <= r.v_curve + 0.01f);
+            CHECK(w.a_max <= 3000.0f * 1.01f);
+            // Angular acceleration: at most the ramps' v^2 / (R ramp), no step.
+            const float alpha = r.v_curve * r.v_curve / (CURVE_RADIUS_MM * CURVE_RAMP_MM) * 57.29578f;
+            CHECK(w.alpha_max <= alpha * 1.05f);
+        }
+    }
+    // The curve speed leaves room to stop after the last curve: sqrt(2 a (post + 90)) = 753 mm/s.
+    const int8_t corner[2] = {1, 0};
+    const run_path_t path = {corner, 2};
+    path_run_t r;
+    CHECK(path_start(&r, &path, &c, CELL_MM, 2000.0f, 2000.0f, 3000.0f));
+    CHECK(fabsf(r.v_curve - sqrtf(2.0f * 3000.0f * (c.post + 90.0f))) < 0.1f);
+    // Malformed paths are refused.
+    const int8_t bad_last[2] = {0, 1}, bad_turn[2] = {2, 0};
+    CHECK(!path_start(&r, &(run_path_t){bad_last, 2}, &c, CELL_MM, 700.0f, 400.0f, 3000.0f));
+    CHECK(!path_start(&r, &(run_path_t){bad_turn, 2}, &c, CELL_MM, 700.0f, 400.0f, 3000.0f));
+    CHECK(!path_start(&r, &(run_path_t){corner, 0}, &c, CELL_MM, 700.0f, 400.0f, 3000.0f));
+    // A calibrated angle: the encoders turn 88 per real 90, the shape stays.
+    curve_t c88;
+    CHECK(curve_setup(&c88, CURVE_RADIUS_MM, CURVE_RAMP_MM, 88.0f, CELL_MM));
+    CHECK(path_start(&r, &path, &c88, CELL_MM, 700.0f, 400.0f, 3000.0f));
+    ref_walk_t w = walk_reference(&r, 20000);
+    CHECK(fabs(w.x - 180.0) < 0.3 && fabs(w.y - 180.0) < 0.3);
+    CHECK(fabsf(r.heading - 88.0f) < 0.001f);
+}
+
+static void test_path_control(void){
+    const curve_t c = default_curve();
+    profile_t fwd, rot;
+    profile_reset(&fwd);
+    profile_reset(&rot);
+    // PAUSE mid-curve: brakes to a stop on the path, then carries on to the same end.
+    const int8_t corner[3] = {0, 1, 0};
+    const run_path_t path = {corner, 3};
+    path_run_t r;
+    CHECK(path_start(&r, &path, &c, CELL_MM, 700.0f, 400.0f, 3000.0f));
+    while(r.s < r.curve_start + 0.5f * c.length) path_step(&r, &fwd, &rot, CONTROL_DT_S);
+    r.hold = 1;
+    for(int i = 0; i < 300; i++) path_step(&r, &fwd, &rot, CONTROL_DT_S);
+    CHECK(r.v == 0.0f && !r.done);
+    CHECK(r.s < r.curve_start + c.length);     // stopped inside the curve
+    const float held = r.s;
+    for(int i = 0; i < 100; i++) path_step(&r, &fwd, &rot, CONTROL_DT_S);
+    CHECK(r.s == held && rot.speed == 0.0f);
+    r.hold = 0;
+    for(int i = 0; i < 5000 && !r.done; i++) path_step(&r, &fwd, &rot, CONTROL_DT_S);
+    CHECK(r.done && r.s == r.length && fabsf(r.heading - 90.0f) < 0.001f);
+
+    // Cell centres on the straight, as the supervision asks for them.
+    const run_path_t straight = {NULL, 5};
+    uint8_t entered;
+    float centre;
+    CHECK(path_start(&r, &straight, &c, CELL_MM, 700.0f, 400.0f, 3000.0f));
+    CHECK(path_straight_centre(&r, 100.0f, 0, &entered, &centre) && entered == 0 && centre == 0.0f);
+    CHECK(path_straight_centre(&r, 100.0f, 1, &entered, &centre) && entered == 1 && centre == 180.0f);
+    CHECK(path_straight_centre(&r, 700.0f, 1, &entered, &centre) && entered == 4 && centre == 720.0f);
+    CHECK(path_straight_centre(&r, 5000.0f, 1, &entered, &centre) && entered == 5 && centre == 900.0f);
+    CHECK(path_on_straight(&r, 10.0f) && fabsf(path_straight_end(&r) - 900.0f) < 0.001f);
+    // Stopping short (a wall where the map had none): ends exactly there.
+    for(int i = 0; i < 150; i++) path_step(&r, &fwd, &rot, CONTROL_DT_S);
+    CHECK(path_straight_centre(&r, r.s + 200.0f, 1, &entered, &centre));
+    r.stop_at = centre;
+    for(int i = 0; i < 5000 && !r.done; i++) path_step(&r, &fwd, &rot, CONTROL_DT_S);
+    CHECK(r.done && r.s == centre && r.v == 0.0f);
+
+    // After a curve: the straight starts at the curve cell's exit edge.
+    const int8_t late[4] = {0, -1, 0, 0};
+    const run_path_t after = {late, 4};
+    CHECK(path_start(&r, &after, &c, CELL_MM, 700.0f, 400.0f, 3000.0f));
+    CHECK(path_straight_centre(&r, 0.0f, 0, &entered, &centre) && entered == 0 && centre == 0.0f);
+    CHECK(fabsf(path_straight_end(&r) - (1.5f * CELL_MM + 0.5f * CELL_MM)) < 0.001f);   // the curve cell's centre
+    while(r.curves == 0) path_step(&r, &fwd, &rot, CONTROL_DT_S);
+    CHECK(!path_on_straight(&r, r.last_curve_end - 1.0f) && path_on_straight(&r, r.last_curve_end));
+    CHECK(fabsf(r.first_edge - (r.last_curve_end + c.post)) < 0.001f && r.first == 2);
+    CHECK(path_straight_centre(&r, r.s + 300.0f, 1, &entered, &centre) && entered == 4);
+    CHECK(!path_straight_centre(&r, r.first_edge, 0, &entered, &centre));   // no centre passed yet
+}
+
+// A path decided on the way must never stop in between and end where the same path planned in one go ends.
+static void test_path_grow(void){
+    const curve_t c = default_curve();
+    static const int8_t plan[9] = {0, 1, 0, -1, 1, 0, 0, -1, 0};    // corners, an S, straights
+    int8_t turns[PATH_MAX_CELLS] = {0};
+    run_path_t path = {turns, 1};
+    path_run_t r;
+    profile_t f, o;
+    profile_reset(&f);
+    profile_reset(&o);
+    CHECK(path_start(&r, &path, &c, CELL_MM, 450.0f, 450.0f, PARAM_ACCEL));
+    uint8_t decided = 0;
+    float entry = 0.5f * CELL_MM;       // entry edge of the next cell to decide
+    float v_min = 1e9f;
+    int steps = 0;
+    while(!r.done && steps < 20000){
+        // Decide cell `decided` 10 mm before its entry edge (the robot's window).
+        if(decided < 8 && r.s >= entry - 10.0f){
+            turns[decided] = plan[decided];
+            turns[decided + 1u] = 0;
+            CHECK(path_grow(&r));
+            entry += plan[decided] ? c.pre + c.length + c.post : CELL_MM;
+            decided++;
+        }
+        path_step(&r, &f, &o, CONTROL_DT_S);
+        if(decided < 8 && r.s > 100.0f) v_min = fminf(v_min, r.v);
+        steps++;
+    }
+    CHECK(r.done && decided == 8);
+    CHECK(v_min > 449.0f);              // never braked for an end that then moved
+    path_run_t once;
+    const run_path_t whole = {plan, 9};
+    CHECK(path_start(&once, &whole, &c, CELL_MM, 450.0f, 450.0f, PARAM_ACCEL));
+    CHECK(fabsf(r.length - once.length) < 0.01f && fabsf(r.s - once.length) < 0.01f);
+    CHECK(fabsf(r.heading - 90.0f * (1 - 1 + 1 - 1)) < 0.001f && r.curves == 4);
+    ref_walk_t a = walk_reference(&once, 20000);
+    CHECK(a.done);
+    // Too late: a curve cannot be added once the reference is past its start.
+    int8_t late[3] = {0, 0, 0};
+    run_path_t p2 = {late, 1};
+    CHECK(path_start(&r, &p2, &c, CELL_MM, 450.0f, 450.0f, PARAM_ACCEL));
+    while(r.s < CELL_MM / 2 + c.pre + 1.0f) path_step(&r, &f, &o, CONTROL_DT_S);
+    late[0] = 1;
+    CHECK(!path_grow(&r));
+    CHECK_EQ(r.path.cells, 1);
+    late[0] = 0;
+    CHECK(path_grow(&r));               // straight on is still fine
+    // Nor once the end moved (a wall seen in front, a short stop).
+    r.stop_at -= 5.0f;
+    CHECK(!path_grow(&r));
+}
+
+// The simulated robot through corners, staircases and u-turns (no walls, no centring): on the centre, square, on the path.
+static void test_path_tracking(void){
+    const curve_t c = default_curve();
+    static const int8_t corner[3] = {0, 1, 0}, stairs[7] = {0, 1, -1, 1, -1, 0, 0}, u_turn[4] = {0, 1, 1, 0};
+    static const int8_t tour[14] = {0, 0, 1, 0, -1, 1, 0, 0, 0, -1, -1, 0, 1, 0};
+    const run_path_t paths[] = {{corner, 3}, {stairs, 7}, {u_turn, 4}, {tour, 14}};
+    const plant_t base = plant_nominal();
+    plant_t plants[7];
+    for(int i = 0; i < 7; i++) plants[i] = base;
+    plants[1].gain_l = plants[1].gain_r = 0.8f;     // the model off by 20 % either way
+    plants[2].gain_l = plants[2].gain_r = 1.2f;
+    plants[3].tau = 0.08f;
+    plants[4].friction = 40.0f;
+    plants[4].stiction = 160.0f;
+    plants[5].dead_ms = 6;
+    plants[6].gain_r = 1.08f;                       // unequal motors
+    for(size_t i = 0; i < sizeof(paths) / sizeof(paths[0]); i++){
+        for(int k = 0; k < 7; k++){
+            const path_result_t r = sim_path(&plants[k], &paths[i], &c, PARAM_FAST_SPEED, PARAM_CURVE_SPEED, PARAM_ACCEL);
+            // Nominal: within 2 mm (the tour: 3.5); a model 20-50 % off leaves 3-7 mm.
+            const uint8_t long_tour = i == 3;
+            const float tol = k == 0 ? (long_tour ? 3.5f : 2.0f) : (long_tour ? 16.0f : 8.0f);
+            const int ok = r.ms > 0 && r.end_err < tol && r.cross_err_max < tol
+                        && fabsf(r.heading_err) < (k == 0 ? 0.5f : 1.0f) && r.fwd_err_max < 6.0f && r.rot_err_max < 3.0f;
+            if(!ok){
+                printf("  path %zu plant %d: end %.2f mm %+.2f deg, off the path %.2f mm, errors %.2f mm %.2f deg, %u ms\n",
+                       i, k, (double)r.end_err, (double)r.heading_err, (double)r.cross_err_max,
+                       (double)r.fwd_err_max, (double)r.rot_err_max, r.ms);
+            }
+            CHECK(ok);
+        }
+        // Curves at the most the motors are asked for, between straights that do not run out of PWM.
+        const path_result_t r = sim_path(&base, &paths[i], &c, 700.0f, 480.0f, PARAM_ACCEL);
+        CHECK(r.end_err < 2.0f && r.cross_err_max < 3.5f && r.pwm_max < CONTROL_PWM_LIMIT);
+    }
+}
+
+// Motors that cannot keep up (70-80 % of the model): the reference slows down instead of running away.
+static void test_path_governor(void){
+    const curve_t c = default_curve();
+    static const int8_t corner[3] = {0, 1, 0}, stairs[7] = {0, 1, -1, 1, -1, 0, 0}, u_turn[4] = {0, 1, 1, 0};
+    static const int8_t tour[14] = {0, 0, 1, 0, -1, 1, 0, 0, 0, -1, -1, 0, 1, 0};
+    const run_path_t paths[] = {{corner, 3}, {stairs, 7}, {u_turn, 4}, {tour, 14}, {NULL, 6}};
+    const plant_t base = plant_nominal();
+    for(size_t i = 0; i < sizeof(paths) / sizeof(paths[0]); i++){
+        const uint8_t long_tour = i == 3;
+        // A robot that keeps up never makes the reference wait.
+        path_result_t r = sim_path(&base, &paths[i], &c, 900.0f, 480.0f, PARAM_ACCEL);
+        CHECK(r.scale_min == 1.0f);
+        const float gains[] = {0.8f, 0.7f};
+        for(size_t g = 0; g < 2; g++){
+            plant_t weak = base;
+            weak.gain_l = weak.gain_r = gains[g];
+            r = sim_path(&weak, &paths[i], &c, 900.0f, 480.0f, PARAM_ACCEL);
+            const float tol = long_tour ? 18.0f : 9.0f;
+            const int ok = r.ms > 0 && r.fwd_err_max < 6.0f && r.scale_min < 0.9f && r.end_err < tol
+                        && r.cross_err_max < tol && r.stall_ms == 0;
+            if(!ok){
+                printf("  governor path %zu motors x%.1f: behind %.2f mm, pace %.2f, end %.2f mm, off the path %.2f mm\n",
+                       i, (double)gains[g], (double)r.fwd_err_max, (double)r.scale_min, (double)r.end_err,
+                       (double)r.cross_err_max);
+            }
+            CHECK(ok);
+        }
+    }
+    plant_t blocked = base;
+    blocked.gain_l = blocked.gain_r = 0.001f;
+    const path_result_t r = sim_path(&blocked, &paths[4], &c, 900.0f, 480.0f, PARAM_ACCEL);
+    CHECK(r.stall_ms > 0 && r.stall_ms < 500);
+}
+
+// The curves slip sideways (~2 deg at 478 mm/s): the path asks the encoders for more; layout C's staircase comes out square.
+static void test_curve_slip(void){
+    static const int8_t stairs[6] = {0, 1, -1, 1, 0, 0};
+    const run_path_t path = {stairs, 6};
+    plant_t p = plant_nominal();
+    p.curve_slip = CURVE_SLIP_DEG;
+    curve_t c = default_curve();
+    const path_result_t raw = sim_path(&p, &path, &c, 900.0f, 480.0f, PARAM_ACCEL);
+    c.slip_k = CURVE_SLIP_DEG / (CURVE_SLIP_VREF_MM_S * CURVE_SLIP_VREF_MM_S);
+    const path_result_t fast = sim_path(&p, &path, &c, 900.0f, 480.0f, PARAM_ACCEL);
+    const path_result_t slow = sim_path(&p, &path, &c, 900.0f, 300.0f, PARAM_ACCEL);
+    const int ok = raw.heading_err < -1.5f && fabsf(fast.heading_err) < 0.3f && fabsf(slow.heading_err) < 0.3f
+                && fast.end_err < 5.0f && slow.end_err < 5.0f;
+    if(!ok){
+        printf("  curve slip: heading off %.2f deg uncompensated, %.2f at 480 and %.2f at 300 mm/s compensated"
+               " (end %.1f, %.1f mm)\n", (double)raw.heading_err, (double)fast.heading_err,
+               (double)slow.heading_err, (double)fast.end_err, (double)slow.end_err);
+    }
+    CHECK(ok);
+}
+
+// `pre` grows with the curve speed above CURVE_PRE_V0 (curves slip outwards the faster).
+static void test_curve_pre_slip(void){
+    static const int8_t layout_e[9] = {0, 1, 1, -1, 1, -1, -1, 0, 0};
+    const run_path_t e = {layout_e, 9};
+    const float vref2 = CURVE_SLIP_VREF_MM_S * CURVE_SLIP_VREF_MM_S;
+    const curve_t plain = default_curve();
+    curve_t c = plain;
+    c.pre_k = 7.0f / (vref2 - 300.0f * 300.0f);
+    c.pre_v0 = 300.0f;
+    path_run_t r;
+    CHECK(path_start(&r, &e, &c, CELL_MM, 900.0f, CURVE_SLIP_VREF_MM_S, PARAM_ACCEL));
+    CHECK(fabsf(r.curve.pre - (plain.pre + 7.0f)) < 0.01f);
+    CHECK(fabsf(r.length - (3.0f * CELL_MM + 6.0f * (r.curve.pre + c.length + c.post))) < 0.01f);
+    CHECK(path_start(&r, &e, &c, CELL_MM, 900.0f, 300.0f, PARAM_ACCEL));
+    CHECK(fabsf(r.curve.pre - plain.pre) < 0.001f);
+    // Never so early that curves in consecutive cells overlap.
+    c.pre_k = -40.0f / vref2;
+    c.pre_v0 = 0.0f;
+    CHECK(path_start(&r, &e, &c, CELL_MM, 900.0f, CURVE_SLIP_VREF_MM_S, PARAM_ACCEL));
+    CHECK(r.curve.pre + r.curve.post > -0.001f);
+    // +7 at 480 moves layout E's exit ~20 mm right in the simulator; 300 mm/s untouched.
+    const plant_t p = plant_nominal();
+    c.pre_k = 7.0f / (vref2 - 300.0f * 300.0f);
+    c.pre_v0 = 300.0f;
+    const path_result_t fast0 = sim_path(&p, &e, &plain, 900.0f, CURVE_SLIP_VREF_MM_S, PARAM_ACCEL);
+    const path_result_t fast = sim_path(&p, &e, &c, 900.0f, CURVE_SLIP_VREF_MM_S, PARAM_ACCEL);
+    const path_result_t slow0 = sim_path(&p, &e, &plain, 900.0f, 300.0f, PARAM_ACCEL);
+    const path_result_t slow = sim_path(&p, &e, &c, 900.0f, 300.0f, PARAM_ACCEL);
+    const float shift = fast.x_exit - fast0.x_exit;
+    CHECK(shift > 15.0f && shift < 25.0f);
+    CHECK(fabsf(slow.x_exit - slow0.x_exit) < 0.5f);
+    CHECK(!fast.stall_ms && fast.cross_err_max < 3.0f && fast.end_err < 5.0f);
+}
+
+// Curves between walls, the centring as motion.c runs it (blind in each curve, a new corridor after): from a
+// disturbed start it keeps the robot on the path, from a centred one it costs little.
+static void test_path_centring(void){
+    static const int8_t stairs[7] = {0, 1, -1, 1, -1, 0, 0}, longc[13] = {0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0};
+    const run_path_t paths[2] = {{stairs, 7}, {longc, 13}};
+    const curve_t c = default_curve();
+    for(int i = 0; i < 2; i++){
+        float off = 0.0f, worst = 0.0f;
+        for(uint32_t seed = 1; seed <= 4; seed++){
+            plant_t p = plant_nominal();
+            p.seed = seed;
+            const path_result_t r = sim_path_walls(&p, &paths[i], &c, PARAM_FAST_SPEED, 400.0f, PARAM_ACCEL,
+                                                   PARAM_KP, PARAM_KD);
+            CHECK(!r.stall_ms);
+            off += r.cross_err_max / 4.0f;
+            worst = fmaxf(worst, r.cross_err_max);
+        }
+        CHECK(off < 4.0f);
+        CHECK(worst < 10.0f);
+        plant_t p = plant_nominal();
+        p.y0 = 10.0f;
+        p.yaw0 = 3.0f;
+        const path_result_t bare = sim_path(&p, &paths[i], &c, PARAM_FAST_SPEED, 400.0f, PARAM_ACCEL);
+        const path_result_t walls = sim_path_walls(&p, &paths[i], &c, PARAM_FAST_SPEED, 400.0f, PARAM_ACCEL,
+                                                   PARAM_KP, PARAM_KD);
+        CHECK(walls.end_err < 8.0f);
+        CHECK(walls.end_err < bare.end_err / 3.0f);
+    }
+}
+
+// host_tests --control: the numbers behind test_speed_control(), for tuning.
+static void control_report(void){
+    printf("straight 540 mm, 15 mm off-centre (KP %.2f KD %.2f):\n", (double)PARAM_KP, (double)PARAM_KD);
+    const float speeds[] = {300.0f, 500.0f, 800.0f, 1000.0f};
+    for(size_t i = 0; i < sizeof(speeds) / sizeof(speeds[0]); i++){
+        plant_t p = plant_nominal();
+        p.y0 = 15.0f;
+        sim_result_t r = sim_straight(&p, 540.0f, speeds[i], 3000.0f, PARAM_KP, PARAM_KD);
+        printf("  %4.0f mm/s: %4u ms, travelled %.2f mm, error max %.2f mm / %.2f deg, y 2nd half %.2f mm,"
+               " end %+.2f mm %+.2f deg, crossings %d, PWM max %d\n", (double)speeds[i], r.ms, (double)r.travelled,
+               (double)r.fwd_err_max, (double)r.rot_err_max, (double)r.y_late, (double)r.y_end, (double)r.yaw_end,
+               r.crossings, r.pwm_max);
+    }
+    // A turn left the robot yawed: how far the straight after it goes before the walls centre it.
+    printf("straight 720 mm after a turn (yaw +-4 deg, centred, walls +-2 mm; mean of 16):"
+           " |y| mm / |yaw| deg at 90, 180 ... 630 mm\n");
+    const float after_turn[] = {300.0f, 450.0f, 600.0f, 800.0f, 900.0f};
+    for(size_t i = 0; i < sizeof(after_turn) / sizeof(after_turn[0]); i++){
+        float y[SIM_SAMPLES] = {0}, yaw[SIM_SAMPLES] = {0};
+        int crossings = 0;
+        for(uint32_t seed = 1; seed <= 16; seed++){
+            plant_t p = plant_nominal();
+            p.seed = seed;
+            p.yaw0 = seed & 1u ? 4.0f : -4.0f;
+            p.wall_error_mm = 2.0f;
+            const sim_result_t r = sim_straight(&p, 720.0f, after_turn[i], 3000.0f, PARAM_KP, PARAM_KD);
+            for(int j = 0; j < SIM_SAMPLES; j++){
+                y[j] += fabsf(r.y_at[j]) / 16.0f;
+                yaw[j] += fabsf(r.yaw_at[j]) / 16.0f;
+            }
+            crossings += r.crossings;
+        }
+        printf("  %4.0f mm/s:", (double)after_turn[i]);
+        for(int j = 0; j < SIM_SAMPLES; j++) printf(" %4.1f/%3.1f", (double)y[j], (double)yaw[j]);
+        printf(", crossings %.1f\n", (double)crossings / 16.0);
+    }
+    const float angles[] = {90.0f, 180.0f};
+    for(size_t i = 0; i < 2; i++){
+        plant_t p = plant_nominal();
+        sim_result_t r = sim_turn(&p, angles[i], PARAM_TURN_SPEED, PARAM_TURN_ACCEL);
+        printf("turn %.0f: %u ms, turned %.2f deg, error max %.2f deg, displacement %.2f mm\n", (double)angles[i],
+               r.ms, (double)r.turned, (double)r.rot_err_max, (double)r.travelled);
+    }
+    const curve_t c = default_curve();
+    printf("curves (radius %.0f, ramps %.0f: %.1f mm, straight before/after %.1f mm), FAST %d:\n",
+           (double)c.radius, (double)c.ramp, (double)c.length, (double)c.pre, PARAM_FAST_SPEED);
+    static const int8_t corner[3] = {0, 1, 0}, stairs[7] = {0, 1, -1, 1, -1, 0, 0}, u_turn[4] = {0, 1, 1, 0};
+    const struct { const char *name; run_path_t path; } paths[] = {
+        {"corner", {corner, 3}}, {"staircase", {stairs, 7}}, {"u-turn", {u_turn, 4}},
+    };
+    const float curve_speeds[] = {300.0f, 400.0f, 500.0f, 600.0f, 700.0f};
+    for(size_t i = 0; i < sizeof(paths) / sizeof(paths[0]); i++){
+        for(size_t j = 0; j < sizeof(curve_speeds) / sizeof(curve_speeds[0]); j++){
+            const plant_t p = plant_nominal();
+            const path_result_t r = sim_path(&p, &paths[i].path, &c, PARAM_FAST_SPEED, curve_speeds[j], PARAM_ACCEL);
+            printf("  %-12s %3.0f mm/s: %4u ms, end %.2f mm and %+.2f deg, off the route %.2f mm,"
+                   " error max %.2f mm / %.2f deg, PWM max %d\n", paths[i].name, (double)curve_speeds[j], r.ms,
+                   (double)r.end_err, (double)r.heading_err, (double)r.cross_err_max, (double)r.fwd_err_max,
+                   (double)r.rot_err_max, r.pwm_max);
+        }
+    }
+    // Curves between walls with the centring, against the same without walls (GitHub issue #1).
+    printf("curves between walls, centring (KP %.1f KD %.2f): max off the route / end mm, no walls | walls\n",
+           (double)PARAM_KP, (double)PARAM_KD);
+    for(int start = 0; start < 2; start++){
+        for(size_t i = 0; i < sizeof(paths) / sizeof(paths[0]); i++){
+            printf("  %s%-12s", start ? "10 mm 3 deg " : "", paths[i].name);
+            for(size_t j = 0; j < 3; j++){
+                plant_t p = plant_nominal();
+                if(start){
+                    p.y0 = 10.0f;
+                    p.yaw0 = 3.0f;
+                }
+                const path_result_t a = sim_path(&p, &paths[i].path, &c, PARAM_FAST_SPEED, curve_speeds[j], PARAM_ACCEL);
+                const path_result_t b = sim_path_walls(&p, &paths[i].path, &c, PARAM_FAST_SPEED, curve_speeds[j],
+                                                       PARAM_ACCEL, PARAM_KP, PARAM_KD);
+                printf("  %3.0f: %4.1f/%4.1f | %4.1f/%4.1f", (double)curve_speeds[j], (double)a.cross_err_max,
+                       (double)a.end_err, (double)b.cross_err_max, (double)b.end_err);
+            }
+            printf("\n");
+        }
+    }
+    // Layout E (no walls, no centring): lateral after the last curve (> 0 right) for several CURVE_PRE_SLIP.
+    static const int8_t layout_e[9] = {0, 1, 1, -1, 1, -1, -1, 0, 0};
+    const run_path_t e = {layout_e, 9};
+    const plant_t base = plant_nominal();
+    printf("layout E (2R1R1L1R1L1L2), lateral after the last curve (> 0 to the right):\n");
+    const float e_speeds[] = {300.0f, 400.0f, 480.0f};
+    const struct { float slip, v0; } laws[] = {{0.0f, 0.0f}, {4.0f, 0.0f}, {7.0f, 0.0f}, {7.0f, 300.0f}, {10.0f, 0.0f}};
+    for(size_t k = 0; k < sizeof(laws) / sizeof(laws[0]); k++){
+        printf("  CURVE_PRE_SLIP %2.0f V0 %3.0f:", (double)laws[k].slip, (double)laws[k].v0);
+        for(size_t j = 0; j < sizeof(e_speeds) / sizeof(e_speeds[0]); j++){
+            curve_t ce = c;
+            ce.pre_k = laws[k].slip / (CURVE_SLIP_VREF_MM_S * CURVE_SLIP_VREF_MM_S - laws[k].v0 * laws[k].v0);
+            ce.pre_v0 = laws[k].v0;
+            const path_result_t r = sim_path(&base, &e, &ce, PARAM_FAST_SPEED, e_speeds[j], PARAM_ACCEL);
+            printf("  %3.0f mm/s %+5.1f mm%s", (double)e_speeds[j], (double)(r.x_exit - 3.0f * CELL_MM),
+                   r.stall_ms ? " (atasco)" : "");
+        }
+        printf("\n");
+    }
+}
+
+// --costs [fast curve]: speed-run time of the route for several (cell, turn) cost pairs (FAST_COST_*).
+static void costs_report(float v_fast, float v_curve){
+    static const plan_costs_t pairs[] = {
+        {2, 4}, {2, 3}, {2, 2}, {2, 1}, {3, 4}, {3, 2}, {3, 1}, {4, 3}, {4, 1}, {5, 2}, {5, 3},
+    };
+    const size_t n_pairs = sizeof(pairs) / sizeof(pairs[0]);
+    const uint16_t openings[] = {0, 40, 150};
+    int8_t turns[PATH_MAX_CELLS];
+    printf("speed run FAST %.0f, curves %.0f mm/s, ACCEL %d: mean seconds start->goal (cells, curves)\n",
+           (double)v_fast, (double)v_curve, PARAM_ACCEL);
+    maze_set_goal(7, 7, 8, 8);
+    cellset_t goal;
+    maze_goal_cells(&goal);
+    for(size_t o = 0; o < sizeof(openings) / sizeof(openings[0]); o++){
+        double seconds[16] = {0}, cells_sum[16] = {0}, curves_sum[16] = {0};
+        int best_count[16] = {0};
+        const int mazes = 200;
+        for(int m = 1; m <= mazes; m++){
+            truth_generate((uint32_t)m * 2654435761u + o, openings[o]);
+            truth_load_into_map();
+            float t[16], best = 1e9f;
+            for(size_t k = 0; k < n_pairs; k++){
+                int8_t turn;
+                uint8_t cells = 0;
+                maze_plan_to(&goal, PLAN_VERIFIED, pairs[k], cost);
+                maze_route(cost, START_X, START_Y, NORTH, PLAN_VERIFIED, pairs[k], &turn, turns, PATH_MAX_CELLS, &cells);
+                t[k] = route_seconds(turns, cells, v_fast, v_curve) + (turn ? 0.3f * (float)(turn < 0 ? -turn : turn) : 0.0f);
+                seconds[k] += t[k];
+                cells_sum[k] += cells;
+                for(uint8_t i = 0; i < cells; i++) curves_sum[k] += turns[i] != 0;
+                best = fminf(best, t[k]);
+            }
+            for(size_t k = 0; k < n_pairs; k++) best_count[k] += t[k] <= best + 0.001f;
+        }
+        printf("  %3u extra openings:\n", openings[o]);
+        for(size_t k = 0; k < n_pairs; k++){
+            printf("    cell %u turn %u: %.3f s (%.1f cells, %.1f curves), the best in %d of %d\n", pairs[k].cell,
+                   pairs[k].turn, seconds[k] / mazes, cells_sum[k] / mazes, curves_sum[k] / mazes, best_count[k], mazes);
+        }
+    }
+    maze_set_goal(GOAL_X0, GOAL_Y0, GOAL_X1, GOAL_Y1);
+}
+
+// A maze file of github.com/micromouseonline/mazefiles as the true maze (goal at its G, else the centre).
+static int mazefile_load(const char *path){
+    FILE *f = fopen(path, "r");
+    if(!f) return 0;
+    char lines[2 * MAZE_SIZE + 1][128];
+    int n = 0;
+    while(n < 2 * MAZE_SIZE + 1 && fgets(lines[n], sizeof(lines[n]), f)){
+        if(lines[n][0] == 'o' || lines[n][0] == '|' || lines[n][0] == '+') n++;
+    }
+    fclose(f);
+    if(n != 2 * MAZE_SIZE + 1) return 0;
+    truth_reset(0);
+    int gx0 = MAZE_SIZE, gy0 = MAZE_SIZE, gx1 = -1, gy1 = -1;
+    for(int y = 0; y < MAZE_SIZE; y++){
+        const char *row = lines[2 * (MAZE_SIZE - 1 - y) + 1], *above = lines[2 * (MAZE_SIZE - 1 - y)];
+        const size_t row_len = strlen(row), above_len = strlen(above);
+        for(int x = 0; x < MAZE_SIZE; x++){
+            if((size_t)(4 * x + 2) < above_len && above[4 * x + 2] != ' ') truth_set_wall((uint8_t)x, (uint8_t)y, NORTH, 1);
+            if((size_t)(4 * x + 4) < row_len && row[4 * x + 4] != ' ' && row[4 * x + 4] != '\n')
+                truth_set_wall((uint8_t)x, (uint8_t)y, EAST, 1);
+            if((size_t)(4 * x + 2) < row_len && row[4 * x + 2] == 'G'){
+                if(x < gx0) gx0 = x;
+                if(y < gy0) gy0 = y;
+                if(x > gx1) gx1 = x;
+                if(y > gy1) gy1 = y;
+            }
+        }
+    }
+    if(gx1 < 0) maze_set_goal(7, 7, 8, 8);
+    else maze_set_goal((uint8_t)gx0, (uint8_t)gy0, (uint8_t)gx1, (uint8_t)gy1);
+    return true_optimum() != PLAN_INF;
+}
+
+// --mazefile <file>...: the whole cycle on each maze, perfect and 3% noise; names the failures.
+static void mazefile_report(int count, char **paths){
+    summary_t sums[2] = {{0}};
+    double longest[2] = {0.0};
+    int over_300[2] = {0}, over_420[2] = {0};   // of the competition's 7 minutes: under 2 left for the races, none
+    for(int i = 0; i < count; i++){
+        for(int k = 0; k < 2; k++){
+            if(!mazefile_load(paths[i])){
+                if(k == 0) printf("  %s: not read or no path to the goal\n", paths[i]);
+                break;
+            }
+            summary_t one = {0};
+            run_cycle(&one, k ? 0.03 : 0.0, (uint32_t)i + 1u, 0.0);
+            const int bad = one.search_ok != 1 || one.fast_ok != 1 || one.back_home != 1 || one.crashes
+                            || (k == 0 && (one.optimal != 1 || one.consistent != 1 || one.blocked));
+            if(bad){
+                printf("  cost %u, optimum %u |", search_fast_path_cost(), true_optimum());
+                printf("  %s%s: search ok %d optimal %d map ok %d fast ok %d home %d blocked %ld crashes %ld\n",
+                       paths[i], k ? " (3% noise)" : "", one.search_ok, one.optimal, one.consistent, one.fast_ok,
+                       one.back_home, one.blocked, one.crashes);
+            }
+            summary_t *s = &sums[k];
+            s->runs++;
+            s->search_ok += one.search_ok;
+            s->optimal += one.optimal;
+            s->consistent += one.consistent;
+            s->fast_ok += one.fast_ok;
+            s->back_home += one.back_home;
+            s->blocked += one.blocked;
+            s->crashes += one.crashes;
+            s->search_stops += one.search_stops;
+            s->search_cells += one.search_cells;
+            s->search_seconds += one.search_seconds;
+            if(one.search_seconds > longest[k]) longest[k] = one.search_seconds;
+            over_300[k] += one.search_seconds > 300.0;
+            over_420[k] += one.search_seconds > 420.0;
+            s->fast_cells += one.fast_cells;
+            s->fast_curves += one.fast_curves;
+            s->fast_turns += one.fast_turns;
+            if(one.decide_pops_max > s->decide_pops_max) s->decide_pops_max = one.decide_pops_max;
+        }
+    }
+    maze_set_goal(GOAL_X0, GOAL_Y0, GOAL_X1, GOAL_Y1);
+    if(!sums[0].runs) return;
+    print_summary("perfect sensing", &sums[0]);
+    print_summary("3% noise", &sums[1]);
+    printf("  worst decision on the way: %u pops (perfect), %u (3%% noise)\n", sums[0].decide_pops_max, sums[1].decide_pops_max);
+    printf("  longest search: %.0f s (perfect), %.0f s (3%% noise); over 300 s: %d and %d; over 420 s: %d and %d\n",
+           longest[0], longest[1], over_300[0], over_300[1], over_420[0], over_420[1]);
+}
+
+// --timing: the planner's pops in each decision on the way (the robot must decide within SEARCH_LATE_MARGIN_MM).
+static void timing_report(void){
+    maze_set_goal(7, 7, 8, 8);
+    cellset_t goal;
+    maze_goal_cells(&goal);
+    maze_init();
+    uint32_t p0 = maze_plan_pops();
+    maze_plan_to(&goal, PLAN_OPTIMISTIC, (plan_costs_t){SEARCH_COST_CELL, SEARCH_COST_TURN}, cost);
+    printf("one plan over the empty 16x16: %u pops (%u states)\n", maze_plan_pops() - p0, MAZE_STATES);
+    const struct { const char *name; uint16_t openings; double noise, doubt; } suites[] = {
+        {"perfect", 0, 0.0, 0.0},
+        {"with loops", 40, 0.0, 0.0},
+        {"open", 150, 0.0, 0.0},
+        {"loops + 20% doubtful sides", 40, 0.0, 0.2},
+        {"loops + 3% noise", 40, 0.03, 0.0},
+        {"loops, competition goal", 40, 0.0, 0.0},
+    };
+    for(size_t i = 0; i < sizeof(suites) / sizeof(suites[0]); i++){
+        uint64_t decides = 0, sum = 0;
+        uint32_t max = 0, hist[SIM_POPS_BUCKETS] = {0};
+        for(uint32_t m = 1; m <= 100; m++){
+            truth_generate(m * 2654435761u + (uint32_t)i, suites[i].openings);
+            if(i == sizeof(suites) / sizeof(suites[0]) - 1) truth_competition_goal(m);
+            maze_init();
+            params_reset();
+            fake_flash_wipe();
+            sim_reset(suites[i].noise, m + 1000u * (uint32_t)i);
+            sim_side_doubt(suites[i].doubt);
+            search_set_home();
+            search_explore();
+            decides += sim_stats.decides;
+            sum += sim_stats.decide_pops;
+            if(sim_stats.decide_pops_max > max) max = sim_stats.decide_pops_max;
+            for(int b = 0; b < SIM_POPS_BUCKETS; b++) hist[b] += sim_stats.decide_hist[b];
+        }
+        printf("  %-32s %6llu decisions on the way, mean %5.0f pops, max %5u | per %uk:",
+               suites[i].name, (unsigned long long)decides, decides ? (double)sum / (double)decides : 0.0, max,
+               SIM_POPS_BUCKET_SIZE / 1024u);
+        for(int b = 0; b < SIM_POPS_BUCKETS; b++) printf(" %u", hist[b]);
+        printf("\n");
+    }
+    // The practice maze, to compare with the robot: its map is 16x16 too.
+    maze_set_goal(3, 2, 3, 2);
+    uint32_t max = 0;
+    uint64_t decides = 0, sum = 0;
+    for(uint32_t m = 1; m <= 100; m++){
+        practice_truth(m, (uint16_t)(m % 3));
+        maze_init();
+        params_reset();
+        fake_flash_wipe();
+        sim_reset(0.0, m);
+        search_set_home();
+        search_explore();
+        decides += sim_stats.decides;
+        sum += sim_stats.decide_pops;
+        if(sim_stats.decide_pops_max > max) max = sim_stats.decide_pops_max;
+    }
+    printf("  %-32s %6llu decisions on the way, mean %5.0f pops, max %5u\n", "practice 4x3, goal (3,2)",
+           (unsigned long long)decides, decides ? (double)sum / (double)decides : 0.0, max);
+    maze_set_goal(GOAL_X0, GOAL_Y0, GOAL_X1, GOAL_Y1);
+}
+
+int main(int argc, char **argv){
+    host_verbose = argc > 1 && strcmp(argv[1], "-v") == 0;
+    fake_flash_wipe();
+    if(argc > 1 && strcmp(argv[1], "--demo") == 0){
+        demo();
+        return 0;
+    }
+    if(argc > 1 && strcmp(argv[1], "--control") == 0){
+        control_report();
+        return 0;
+    }
+    if(argc > 1 && strcmp(argv[1], "--costs") == 0){
+        costs_report(argc > 3 ? (float)atof(argv[2]) : PARAM_FAST_SPEED, argc > 3 ? (float)atof(argv[3]) : PARAM_CURVE_SPEED);
+        return 0;
+    }
+    if(argc > 2 && strcmp(argv[1], "--mazefile") == 0){
+        host_verbose = getenv("HOST_VERBOSE") != NULL;
+        mazefile_report(argc - 2, argv + 2);
+        return 0;
+    }
+    if(argc > 1 && strcmp(argv[1], "--timing") == 0){
+        timing_report();
+        return 0;
+    }
+    if(argc > 3 && strcmp(argv[1], "--transcript") == 0){
+        int practice = 0, phantom = 0;
+        for(int i = 4; i < argc; i++){
+            practice |= strcmp(argv[i], "practice") == 0;
+            phantom |= strcmp(argv[i], "phantom") == 0;
+        }
+        transcript((uint32_t)strtoul(argv[2], NULL, 10), (uint16_t)strtoul(argv[3], NULL, 10), practice, phantom);
+        return 0;
+    }
+
+    test_crc32();
+    test_evidence();
+    test_side_doubt();
+    test_planner_basics();
+    test_planner_against_reference();
+    test_storage();
+    test_storage_map_only();
+    test_races_only_read();
+    test_sqrt();
+    test_run_control();
+    test_repair_at_rest();
+    test_repair_escalates();
+    test_front_doubt();
+    test_fast_run_surprise_wall();
+    test_race_false_block();
+    test_blocked_leg_keeps_turned();
+    test_fast_run_no_curves();
+    test_race_return_curves();
+    test_search_modes();
+    test_practice_maze();
+    test_wall_followers();
+    test_competition_mazes();
+    test_profile();
+    test_steering_pd();
+    test_speed_control();
+    test_curve_shape();
+    test_path_reference();
+    test_path_control();
+    test_path_grow();
+    test_path_tracking();
+    test_path_governor();
+    test_curve_slip();
+    test_curve_pre_slip();
+    test_path_centring();
+
+    printf("%d checks, %d failures\n", checks, failures);
+    return failures ? 1 : 0;
+}

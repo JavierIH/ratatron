@@ -1,0 +1,31 @@
+#include "params.h"
+#include "crc32.h"
+#include "robot_config.h"
+
+// No implicit padding: the struct is checksummed and stored byte for byte.
+_Static_assert(sizeof(params_t) == 24, "params_t layout changed");
+
+#define PARAMS_DEFAULTS { \
+    .kp = PARAM_KP, \
+    .kd = PARAM_KD, \
+    .search_speed = PARAM_SEARCH_SPEED, \
+    .fast_speed = PARAM_FAST_SPEED, \
+    .accel = PARAM_ACCEL, \
+    .turn_speed = PARAM_TURN_SPEED, \
+    .turn_accel = PARAM_TURN_ACCEL, \
+    .turn_ticks = PARAM_TURN_TICKS, \
+    .log_level = PARAM_LOG_LEVEL, \
+    .telemetry = PARAM_TELEMETRY, \
+    .curve_speed = PARAM_CURVE_SPEED, \
+}
+
+static const params_t DEFAULTS = PARAMS_DEFAULTS;
+params_t params = PARAMS_DEFAULTS;
+
+void params_reset(void){
+    params = DEFAULTS;
+}
+
+uint32_t params_defaults_signature(void){
+    return crc32_update(0, &DEFAULTS, sizeof(DEFAULTS));
+}

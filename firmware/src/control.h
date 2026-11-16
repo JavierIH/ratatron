@@ -1,0 +1,116 @@
+#ifndef CONTROL_H
+#define CONTROL_H
+
+#include <stdint.h>
+
+// Speed control (pure C, also run by the host tests): profiles, position loops and wall centring; mm, deg > 0 clockwise.
+
+// ---- Motion profile ------------------------------------------------------------------
+
+// Trapezoidal profile to `target` at `final` speed; a target that moves (a wall seen) may brake at up to 2x `rate`.
+typedef struct {
+    float pos;          // distance covered by the reference since the start
+    float delta;        // pos change in the last step
+    float speed;        // signed reference speed
+    float accel;        // signed reference acceleration in the last step (feedforward)
+    float target;       // end point, same units as pos
+    float top;          // cruise speed (> 0)
+    float final;        // speed at the target (>= 0)
+    float rate;         // acceleration limit (> 0)
+    int8_t dir;         // +1 / -1
+    uint8_t active;     // still heading for the target
+} profile_t;
+
+// Square root (0 for x <= 0): newlib's sqrtf pulls in ~2 KB of double code.
+float control_sqrt(float x);
+
+void profile_reset(profile_t *p);   // at rest at 0
+void profile_start(profile_t *p, float distance, float top, float final, float rate);
+void profile_step(profile_t *p, float dt);
+float profile_remaining(const profile_t *p);    // distance left, >= 0
+// Continue from standstill at `pos` towards the same target (after a pause).
+void profile_resume(profile_t *p, float pos);
+// Highest end-of-step speed that still reaches `rem` at `final` braking at `rate`.
+float profile_brake_speed(float v, float rem, float final, float rate, float dt);
+
+// ---- Wheel controllers ---------------------------------------------------------------
+
+typedef struct {
+    float ticks_per_mm;     // encoder resolution
+    float wheel_diff;       // left wheel travel per tick relative to the right one, minus 1 (diameter mismatch)
+    float mm_per_deg;       // wheel travel per degree of in-place rotation (from TURNTICKS)
+    float kv_l, kv_r;       // feedforward: PWM per mm/s of each wheel
+    float tau;              // feedforward: motor time constant, s (PWM per mm/s^2 = kv * tau)
+    float ks;               // feedforward: PWM that overcomes the friction while moving
+    float fwd_kp, fwd_kd;   // forward loop: PWM per mm, PWM per mm/s
+    float rot_kp, rot_kd;   // rotation loop: PWM per deg, PWM per deg/s
+    float rot_ki;           // rotation loop: PWM per deg*s (motor imbalance)
+    float rot_i_max;        // clamp of the integral, PWM
+    float settle_ki_fwd;    // integrals while settling (profiles arrived): PWM per mm*s...
+    float settle_ki_rot;    // ...and per deg*s, to beat the static friction
+    float settle_i_max;     // clamp of those, PWM
+    float pwm_limit;        // output clamp
+} control_config_t;
+
+#define CONTROL_D_WINDOW 4  // ms over which the error change (damping) is measured
+#define CONTROL_STILL_STEPS 5   // steps without encoder motion = stalled (settling integrals)
+
+typedef struct {
+    float fwd_error;        // mm: reference minus measured
+    float rot_error;        // deg: reference (profile + steering) minus measured
+    float rot_integral;     // PWM
+    float settle_fwd, settle_rot;   // settling integrals, PWM
+    uint8_t still_fwd, still_rot;   // steps in a row without motion on each axis
+    float steer_prev;       // heading offset of the last step, deg
+    float fwd_hist[CONTROL_D_WINDOW];
+    float rot_hist[CONTROL_D_WINDOW];
+    uint8_t slot;
+    uint8_t saturated;      // the last output hit pwm_limit
+    int16_t pwm_l, pwm_r;   // last output
+} control_t;
+
+void control_reset(control_t *c);
+// Errors and damping to zero, keeping the learned imbalance and the steering offset (after a pause).
+void control_clear_errors(control_t *c);
+// One period: dl/dr ticks since the last call, profiles stepped, steer = heading offset (deg); writes pwm_l/pwm_r.
+void control_step(control_t *c, const control_config_t *k, const profile_t *fwd, const profile_t *rot,
+                  float steer, int32_t dl, int32_t dr, float dt);
+
+// ---- Wall centring ---------------------------------------------------------------------
+
+typedef enum { STEER_WALL_NONE, STEER_WALL_RIGHT, STEER_WALL_LEFT, STEER_WALL_BOTH } steer_wall_t;
+
+typedef struct {
+    float kp;               // deg/s of turn per mm off-centre
+    float kd;               // deg of turn per mm the error changes
+    float track_mm;         // a side wall closer than this is a reference
+    float center_l_mm;      // SL reading with the robot on the centre line
+    float center_r_mm;      // SR reading with the robot on the centre line
+    float error_max_mm;     // clamp of the lateral error
+    float jump_mm;          // a side reading this much farther than 2 ms before (a wall's end) stops counting...
+    float hold_mm;          // ...until it reads steady over this many mm travelled; so does a wall that appears
+    uint8_t average_steps;  // side readings averaged over this many steps (<= STEER_AVERAGE_MAX)
+} steer_config_t;
+
+#define STEER_AVERAGE_MAX 40
+
+typedef struct {
+    float heading;          // heading offset asked for, deg (> 0: to the right)
+    float error;            // lateral error, averaged, mm (> 0: left of the centre line)
+    float sum;              // of the last average_steps errors
+    float hist[STEER_AVERAGE_MAX];
+    float last[2][2];       // each side's (left, right) last two readings, mm
+    float hold[2];          // mm each side must still read steady before it counts
+    uint8_t slot;
+    uint8_t wall;           // steer_wall_t in use
+    uint8_t valid;          // error holds a reading
+    uint8_t fresh;          // no readings yet: the next ones start the history
+} steer_t;
+
+void steer_reset(steer_t *s);
+// A new corridor (after a curve): forget the readings, keep the heading offset.
+void steer_restart(steer_t *s);
+// One period of the wall follower: side readings (mm), dt (s), ds (mm travelled), gain (fades to 0 at a move's end).
+float steer_step(steer_t *s, const steer_config_t *k, float sl_mm, float sr_mm, float dt, float ds, float gain);
+
+#endif // CONTROL_H

@@ -1,0 +1,166 @@
+# Roadmap (2026-11-11)
+
+Where the firmware stands after the audit of 11-11 and what to do next,
+in order, to make the robot more robust, the code simpler and the runs
+faster. Every number is from the simulator on the 523 classic 16x16 mazes
+of `micromouseonline/mazefiles` (perfect sensing unless it says noise)
+or from the robot session it names. The history is in `review.md`; the
+state of each issue in `ISSUES.md`.
+
+## Where it stands
+
+- Simulator: 523 of 523 searches end with the optimal path verified,
+  182 s on average; 0 searches fail in 4184 with 3 % noise (4 before
+  11-11); the race's route to the goal takes 17.5 s at 900/400.
+  `make -C test/host`: 3963 checks; tools: 34 tests.
+- Robot: flashed 11-13 (`practice`) with all of it, and validated that
+  day (`docs/testing.md`, session of 11-13): the wall-end hold of the
+  centring (GitHub issue #1), `IR_DELAY_MS` 22, races that only read the
+  map, the audit's A3-A5, the doubtful front, the followers' own map.
+- Sizes: `competition` RAM 52.7 %, flash 82.4 % (11.2 KB free);
+  `practice`/`dev` RAM 84.4 %, flash 91.0 % (5.7 KB free).
+
+## Rules that hold (do not break them)
+
+1. No entry of the race menu changes the map or writes the flash
+   (`test_races_only_read`). A race that finds a wall on its verified
+   route ends there: the pose is wrong, not the map. Only the search
+   records walls, and only the search and the console save.
+2. A reading that is not sure is not recorded, neither as a wall nor as
+   open (sides and front).
+3. The pose moves only with a confirmed move; anything else ends the run.
+4. Nothing erases the flash during a run; saves happen at rest.
+5. A new constant or knob needs a measurement; one that stays neutral
+   after its test is deleted, and so is a path that was superseded.
+
+## 1. Robustness
+
+In order. The first two are worth more than any new code.
+
+1. **Validate on the robot what only the simulator has seen.** Done
+   11-13: one flash, steps 1-6 of the session all passed.
+2. **A large maze.** The robot has never run more than the 4x3
+   (issue 11). Two things only a long run shows:
+   - the decisions on the way. On the practice maze the worst took 4.3 ms
+     for 1024 pops (10-08); the worst on the real mazes is 5144 pops,
+     ~12 ms estimated (139 cycles a pop on the emulated chip, plus the
+     2.3 ms that decision took beyond its plan): 5.5 mm at 450 mm/s of
+     the 8 mm `SEARCH_LATE_MARGIN_MM`. `STATUS` after a search must say `late 0`;
+     if not, raise `TUNE LATE_MARGIN` before touching the planner;
+   - the heading over long straights and many turns (no gyro): `LOG 2`,
+     the `err=` of every stop.
+3. **Record every competition run.** The race 2.4 crash at OSHWDEM
+   (issue 17) has no log, so it cannot be explained. `bt_logger.py`
+   running and `LOG 2` at every run; a crash with a log is a fix.
+4. **The light.** The IR have no ambient subtraction and the hardware is
+   fixed: ~200 counts of extra light make an open right side a wall.
+   The automatic check failed (`lighting.md`); the defence is the
+   checklist's `IR` reading and shade. If a venue bites, the one piece
+   worth trying is the fronts' open reading at START (no turns, the
+   placement does not move it), with a lamp measurement first.
+5. **What noise still does** (3 % of readings wrong, far more than the
+   robot's): 1 race in ~3000 stops at a wall on a passage two wrong
+   sightings verified, and 7 in 6000 end at the start for a wall "seen"
+   twice in front. Both end the race with the map untouched; a new
+   search heals the first. Tried: races that trust only passages driven
+   or seen three times (`EV_VERIFIED` 3) cost 0.03 s a race and leave 14
+   of 523 routes not optimal; in 2092 noisy cycles neither setting had a
+   failure, so there is nothing to show for it. Only if the robot shows
+   the failure.
+6. **The stack with a follower.** Races 2.1/2.2 keep the map's copy on
+   the stack (292 B). Read 11-13 (`practice`): 1632 B never used after
+   one (1856 after the search, 2232 at boot). Enough; nothing to do.
+
+Not planned: a SysTick stop when the following error runs away while the
+main loop blocks (never seen), a lock on the map (the test covers it).
+
+## 2. Simplicity
+
+Removed on 11-11: the races' exploring and saving (-170 B), `CHECK`
+(103 lines, -1.7 KB), the pre-speed-control analyses of
+`calib_analyze.py` (127 lines), the Spanish left. What is left to
+remove, each with what decides it:
+
+1. **One way to search.** There are two: straight legs decided on the
+   way (the default) and `CONT OFF`, a stop in every cell. In the
+   simulator the legs are 4-7 % faster (30 random mazes of each kind:
+   106.6 against 111.1 s on perfect ones, 49.3 against 52.8 on open
+   ones): that is all they buy. After
+   the large maze, keep one:
+   - legs clean (`late 0`, the map right): delete `CONT OFF`, `forward()`
+     in `search.c`, the sides' sampling in `run_path()` and the mode's
+     tests (~60 lines, and the robot check of A4 with them);
+   - legs not clean: delete the legs (`motion_explore()`, `explore_step()`,
+     `path_grow()`, the leg code of `search.c`: ~200 lines) and take the
+     5 %.
+2. **The race menu.** Race 2.6 (900/480) was not repeatable (issue 12).
+   If it still is not after the wall-end fix, delete it: the menu and
+   `app_mode_t` (which keeps old numbers for the telemetry) get shorter.
+3. **Knobs at their neutral value.** `TUNE` has 31 entries. To delete
+   once their test is done: `STEER_HOLD` 0 (the old centring) when the
+   wall ends pass on the robot. `CURVE_PRE`, `CURVE_POST` deleted 11-16;
+   `CURVE_ANGLE` (90) stays: the curve's angle, its TUNE for `CAL CURVE`.
+4. **The flash stress tools** of the `virtual` build (`TUNE STRESS`,
+   `REVERSAL`, `HSI`): deleted 11-16 (no hardware change coming; up to
+   e6df08a, `docs/faults/oshwdem2026.md` 2.5).
+5. `motion.c` (905 lines) stays in one file (the user's call, 10-06);
+   item 1 is what shortens it.
+
+## 3. Efficiency
+
+Where the time goes: a search is 182 s, of which reaching the goal and
+coming back is 132 s and verifying the best path (phase OPTIM) 50 s; the
+race is 17.5 s to the goal.
+
+1. **The OPTIM phase is a choice, by the competition's rules.**
+
+   | `OPTIMIZE_MAX_STEPS` | search | route at 900/400 | optimal |
+   |---|---|---|---|
+   | 0 | 131.7 s | 18.21 s | 251 of 523 |
+   | 100 | 143.2 s | 18.07 s | 305 |
+   | 200 | 166.2 s | 17.76 s | 420 |
+   | 400 | 181.4 s | 17.49 s | 520 |
+   | 800 (now) | 182.1 s | 17.49 s | 523 |
+
+   The user's competition (told 11-13): 7 minutes for the search and
+   the races together, the search time does not score. So 800 stays and
+   no console setting is added. What the 7 minutes cost, on the 523 real
+   mazes (`host_tests --mazefile` prints it):
+
+   | `OPTIMIZE_MAX_STEPS` | longest search | over 300 s | over 420 s |
+   |---|---|---|---|
+   | 1 | 447 s | 6 | 2 |
+   | 200 | 447 s | 7 | 2 |
+   | 800 (now) | 447 s | 16 | 2 |
+
+   A race there and back is ~50 s (5 s countdown, ~17.5 s, the return at
+   600): the average search (182 s) leaves time for four, and 507 of 523
+   leave two minutes or more. OPTIM moves 10 mazes (2 %) across that
+   line and none across the 7 minutes; the two over 420 s are long on the
+   way to the goal. With 3 % noise: 32 over 300 s, 2 over 420. If a maze
+   turns out that long: the map is saved at the goal, so `STOP`, the
+   robot to the start and a new search goes on from that map.
+2. **The legs' speed.** `SEARCH_LEG_SPEED_MAX` 450 -> 600 takes the search
+   from 182 to 161 s (300: 230 s). It was kept at 450 on 10-08 (robust
+   before fast). To raise it: the decisions must fit (~7.3 of the 8 mm
+   margin at 600, so `LATE_MARGIN` up first) and the stops on a front
+   wall must stay `end=IR` within 1 mm on layout D at 600.
+3. **The races are at the hardware's limits.** Straights: the motors
+   hold ~937 mm/s (`FAST` 900). Curves: ~480 by the motors, less by the
+   grip. `ACCEL` 3000: 5000 slipped. The planner's costs are measured
+   (`review.md`, step 2): 2/1 picks the best route in 198 of 200. What
+   would still gain is diagonals, which the user dropped.
+4. **CPU.** A plan is ~2 ms (1024 pops), `curve_setup()` 2.1 ms at rest,
+   SysTick ~265 us a tick while moving, ~325 at worst (emulated chip,
+   11-16: `docs/review.md`, question 4 of 10-22); the 424-444 us of
+   `STATUS` are the CAL recorder halving its buffer. Nothing to do
+   unless the large maze says `late`.
+
+## Order
+
+1. The robot session (robustness 1): done 11-13.
+2. The large maze (robustness 2), then one way to search (simplicity 1)
+   and the legs' speed (efficiency 2).
+3. `OPTIM` (efficiency 1): decided 11-13 with the rules, 800 stays.
+4. After the next competition: the logs (robustness 3), race 2.6, the
+   stress tools, the neutral knobs.
