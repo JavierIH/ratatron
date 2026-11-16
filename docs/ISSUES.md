@@ -26,13 +26,12 @@ commit when done. Details go in the docs it points to, not here.
 - Issue 23, one repo for the whole robot (11-16): the firmware repo
   (`rat_sw`) merged into the hardware's (`ratatron`), every commit with
   its hash: `electronics/`, `mechanics/`, `firmware/`, `software/`,
-  `docs/`. Built in a local clone, nothing pushed: all envs build
-  (`competition` equal to the old build but for the build time), host
-  tests and tool tests pass. Left, the user's calls: push to `ratatron`
-  and check the CI; `rat_sw` with a README pointing here, archived; a
-  licence for the hardware (the GPLv3 is the code's); the branch
-  `jev-remote` (old layout: rebase or merge); the changes not committed
-  in the old hardware clone (`rat.fcstd`, `battery_cover.stl`).
+  `docs/`. Pushed 11-16 (`develop`, tags `v0.2.0`, `v0.2.1`); all envs
+  build (`competition` equal to the old build but for the build time),
+  host tests and tool tests pass. Left, the user's calls: `rat_sw` with
+  a README pointing here, archived; a licence for the hardware (the
+  GPLv3 is the code's). The branch `jev-remote` stays local, in the old
+  layout (the user, 11-16: it may never be pushed).
 
 - Issue 22, review of 10-22 and audit of 11-11 (`docs/review.md`, last
   two sections). The audit (A1-A6, the doubtful front) is validated on
