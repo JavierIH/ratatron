@@ -8,7 +8,7 @@
 .vscode/ipch
 
 # Host tests
-test/host/build/
+firmware/test/host/build/
 
 # Python
 __pycache__/

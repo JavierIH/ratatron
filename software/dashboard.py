@@ -2,11 +2,11 @@
 """Live terminal dashboard for the rat robot: LEDs, IR sensors and encoders.
 
 Reads "DATA,l1,l2,l3,l4,l5,l6,sl,fl,fr,sr,enc_l,enc_r" lines produced by the
-diag_test firmware (src/test_diag.c) over a serial/RFCOMM link and renders
+diag_test firmware (firmware/src/test_diag.c) over a serial/RFCOMM link and renders
 them live in a colored terminal panel.
 
 Usage:
-    python3 tools/dashboard.py [--port /dev/rfcomm0] [--baud 9600]
+    python3 software/dashboard.py [--port /dev/rfcomm0] [--baud 9600]
 Press 'q' to quit.
 """
 import argparse

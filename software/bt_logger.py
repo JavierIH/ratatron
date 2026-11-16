@@ -1,8 +1,8 @@
-"""Bluetooth logger for driving the robot from scripts (tools/robot.sh).
+"""Bluetooth logger for driving the robot from scripts (software/robot.sh).
 
 Holds /dev/rfcomm0 open (without it, an RFCOMM socket to the HC-05: no
-root needed), records the session to tools/logs/ as
-robot_monitor.py does, saves @D dumps as CSV in tools/calib_data/, and sends
+root needed), records the session to software/logs/ as
+robot_monitor.py does, saves @D dumps as CSV in software/calib_data/, and sends
 to the robot every line written to the FIFO $RAT_BT_DIR/bt_in (default
 /tmp/rat_bt). Reconnects by itself when the link drops. Only one program may
 hold the port: close robot_monitor.py first. `/note <text>` lines annotate
@@ -17,25 +17,25 @@ import time
 import serial
 
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-sys.path.insert(0, os.path.join(REPO, "tools"))
+sys.path.insert(0, os.path.join(REPO, "software"))
 import robot_monitor as rm  # noqa: E402
 
 HERE = os.environ.get("RAT_BT_DIR", "/tmp/rat_bt")
 os.makedirs(HERE, exist_ok=True)
 FIFO = os.path.join(HERE, "bt_in")
-HC05 = "20:13:09:11:04:32"  # the robot's module (tools/rfcomm_reconnect.sh)
+HC05 = "20:13:09:11:04:32"  # the robot's module (software/rfcomm_reconnect.sh)
 if os.path.exists(FIFO) and not stat.S_ISFIFO(os.stat(FIFO).st_mode):
     os.remove(FIFO)
 if not os.path.exists(FIFO):
     os.mkfifo(FIFO)
 
 stamp = time.strftime("%Y-%m-%d_%H-%M-%S")
-log_path = os.path.join(REPO, "tools", "logs", stamp + ".log")
+log_path = os.path.join(REPO, "software", "logs", stamp + ".log")
 log = open(log_path, "w", encoding="utf-8", buffering=1)
 with open(os.path.join(HERE, "bt_log_path"), "w") as f:
     f.write(log_path + "\n")
 t0 = time.monotonic()
-capture = rm.CalibrationCapture(os.path.join(REPO, "tools", "calib_data"))
+capture = rm.CalibrationCapture(os.path.join(REPO, "software", "calib_data"))
 
 
 def record(direction, text):

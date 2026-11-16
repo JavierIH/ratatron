@@ -2,7 +2,7 @@
 """Tests for robot_monitor.py:  python3 -m unittest discover -s tools
 
 The key test replays what the real firmware sends over Bluetooth during
-simulated runs (test/host --transcript) and checks, at every decision the
+simulated runs (firmware/test/host --transcript) and checks, at every decision the
 robot logs, that the monitor's planner computes the same cost and action.
 """
 import copy
@@ -26,7 +26,7 @@ sys.path.insert(0, HERE)
 
 import robot_monitor as rm  # noqa: E402
 
-HOST_DIR = os.path.join(ROOT, "test", "host")
+HOST_DIR = os.path.join(ROOT, "firmware", "test", "host")
 HOST_TESTS = os.path.join(HOST_DIR, "build", "host_tests")
 MONITOR = os.path.join(HERE, "robot_monitor.py")
 ACTION_NAME = {"F": "FORWARD", "L": "LEFT", "R": "RIGHT", "U": "U-TURN", None: "-"}

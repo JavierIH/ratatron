@@ -2,16 +2,16 @@
 """Live monitor and console for the Ratatron micromouse.
 
 Draws the maze while the robot explores it (from the robot's '@' telemetry
-lines, see src/telemetry.h) next to the run log, and sends typed commands.
+lines, see firmware/src/telemetry.h) next to the run log, and sends typed commands.
 The planned route is recomputed here with the robot's own planner and costs
-(read from src/robot_config.h), so the drawing shows what the robot will do.
+(read from firmware/src/robot_config.h), so the drawing shows what the robot will do.
 
-    python3 tools/robot_monitor.py [--port /dev/rfcomm0] [--baud 9600]
-    python3 tools/robot_monitor.py --replay tools/logs/<session>.log [--speed 4]
+    python3 software/robot_monitor.py [--port /dev/rfcomm0] [--baud 9600]
+    python3 software/robot_monitor.py --replay software/logs/<session>.log [--speed 4]
 
-Sessions are recorded to tools/logs/ (--no-record to disable) and can be
+Sessions are recorded to software/logs/ (--no-record to disable) and can be
 replayed. Calibration dumps (CAL commands) are saved as CSV files in
-tools/calib_data/; add your own measurements to the last one with /note.
+software/calib_data/; add your own measurements to the last one with /note.
 The monitor only talks to the robot when you type a command (plus one SYNC
 on connect), so it does not slow the robot down.
 
@@ -41,7 +41,7 @@ except ImportError:     # only needed for a live connection, not for --replay or
     serial = None
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-CONFIG_H = os.path.join(HERE, "..", "src", "robot_config.h")
+CONFIG_H = os.path.join(HERE, "..", "firmware", "src", "robot_config.h")
 LOG_DIR = os.path.join(HERE, "logs")
 CALIB_DIR = os.path.join(HERE, "calib_data")
 
@@ -86,8 +86,8 @@ def state(x, y, h):
     return ((y * MAZE + x) << 2) | h
 
 
-ROUTE_MAX_CELLS = 255   # PATH_MAX_CELLS in src/path.h
-ROUTE_TEXT_MAX = 40     # as in src/search.c
+ROUTE_MAX_CELLS = 255   # PATH_MAX_CELLS in firmware/src/path.h
+ROUTE_TEXT_MAX = 40     # as in firmware/src/search.c
 
 
 # ---- Maze model built from the telemetry ---------------------------------------------
@@ -463,7 +463,7 @@ class CalibrationCapture:
             path = os.path.join(self.directory, "%s_%s_%d.csv" % (stamp, test.lower(), suffix))
             suffix += 1
         with open(path, "x", encoding="utf-8") as f:
-            f.write("# rat_sw calibration data (tools/calib_analyze.py)\n")
+            f.write("# rat_sw calibration data (software/calib_analyze.py)\n")
             f.write("# captured: %s\n" % time.strftime("%Y-%m-%d %H:%M:%S"))
             f.write("# test: %s\n" % capture["test"])
             for info in capture["info"]:
@@ -1456,7 +1456,7 @@ def friendly_error(exc):
     if "exclusively lock" in low or "resource temporarily unavailable" in low:
         return "port held by another program (another monitor open?)"
     if "no such file" in low:
-        return "no such port (rfcomm bind? see tools/rfcomm_reconnect.sh)"
+        return "no such port (rfcomm bind? see software/rfcomm_reconnect.sh)"
     if "permission denied" in low:
         return "no permission on the port (dialout group)"
     if "host is down" in low or "connection refused" in low or "no route" in low:

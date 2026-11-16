@@ -5,7 +5,7 @@
 #include "sysclock.h"
 #include "uart.h"
 
-// LED + IR + encoder panel (env diag_test) for tools/dashboard.py; the motors are never driven.
+// LED + IR + encoder panel (env diag_test) for software/dashboard.py; the motors are never driven.
 #define WALL_MM 200
 
 int main(void){
