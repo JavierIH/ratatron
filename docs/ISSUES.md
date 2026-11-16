@@ -23,16 +23,6 @@ commit when done. Details go in the docs it points to, not here.
 
 ## Open
 
-- Issue 23, one repo for the whole robot (11-16): the firmware repo
-  (`rat_sw`) merged into the hardware's (`ratatron`), every commit with
-  its hash: `electronics/`, `mechanics/`, `firmware/`, `software/`,
-  `docs/`. Pushed 11-16 (`develop`, tags `v0.2.0`, `v0.2.1`); all envs
-  build (`competition` equal to the old build but for the build time),
-  host tests and tool tests pass. Left, the user's calls: `rat_sw` with
-  a README pointing here, archived; a licence for the hardware (the
-  GPLv3 is the code's). The branch `jev-remote` stays local, in the old
-  layout (the user, 11-16: it may never be pushed).
-
 - Issue 22, review of 10-22 and audit of 11-11 (`docs/review.md`, last
   two sections). The audit (A1-A6, the doubtful front) is validated on
   the robot (11-13, `docs/testing.md`). Question 5 done 11-16
@@ -58,6 +48,15 @@ commit when done. Details go in the docs it points to, not here.
   baseboard oscillation check is dropped (11-16: no means to do it).
 
 ## Closed
+
+- 2026-11-16 One repo for the whole robot (issue 23): the firmware repo
+  (`rat_sw`) merged into the hardware's (`ratatron`), every commit with
+  its hash, as `electronics/`, `mechanics/`, `firmware/`, `software/`,
+  `docs/`; pushed with the tags, CI green. The hardware is CC BY-SA 4.0
+  (the user's choice), the code GPLv3. `rat_sw` has an orphan `main`
+  (the default) with a README pointing here; archiving it on GitHub is
+  the user's. The branch `jev-remote` stays local, in the old layout
+  (the user: it may never be pushed).
 
 - 2026-11-16 OSHWDEM 2026 (issue 17; `docs/faults/oshwdem2026.md`, section
   7): the race 2.4 crash was the old heading-based centring (parallel but
