@@ -14,15 +14,22 @@
   `lighting.md` (the venue's light on the IR: the manual check),
   `faults/` (investigations: `freezes.md`, `oshwdem2026.md`, `centring.md`).
   Read only what the issue needs; keep this file to rules and commands.
-- The robot over Bluetooth: `python3 tools/bt_logger.py &` (holds
+- The robot over Bluetooth: `python3 software/bt_logger.py &` (holds
   `/dev/rfcomm0`, or without it an RFCOMM socket, no root; logs to
-  `tools/logs/`, saves `@D` dumps) and
-  `tools/robot.sh [-w regex] [-t s] "CMD" ...`. Only one program may hold
+  `software/logs/`, saves `@D` dumps) and
+  `software/robot.sh [-w regex] [-t s] "CMD" ...`. Only one program may hold
   the port (close `robot_monitor.py` first). Keep outputs short: grep the
-  lines that matter, summarise recordings with `tools/calib_analyze.py`.
-- The session logs (`tools/logs/`) are the only record of the robot's
+  lines that matter, summarise recordings with `software/calib_analyze.py`.
+- The session logs (`software/logs/`) are the only record of the robot's
   runs: commit them after every robot session (the repo is public: check
   them for personal data first, e.g. home paths).
+
+## Repo layout
+One repo for the whole robot (since 2026-11-16; before, the firmware was
+`rat_sw` and this repo held only the hardware): `electronics/` (KiCad),
+`mechanics/` (FreeCAD, STL), `firmware/` (PlatformIO project: `src/`,
+`lib/`, `test/host/`), `software/` (PC tools, session logs, calibration
+recordings), `docs/`. A file's history before the move: `git log --follow`.
 
 ## Project objective
 "rat": micromouse firmware for an STM32F103 robot. It explores an
@@ -58,7 +65,8 @@ Goal configuration:
   the build's default goal back.
 
 ## Hardware
-- Own board, not a Blue Pill: github.com/JavierIH/ratatron (KiCad). Its
+- Own board, not a Blue Pill: `electronics/` (KiCad; the body in
+  `mechanics/`, FreeCAD). Its
   8 MHz crystal circuit is wrong on the PCB, fixed by hand (cut tracks,
   wires): the KiCad files do not show the robot's oscillator.
 - The robot is 72 mm wide. No IMU/gyro: the heading comes only from the
@@ -71,7 +79,7 @@ Goal configuration:
   to 32-bit odometry every 1 ms in `encoder_tick()`).
 - 4 IR distance sensors (FL/FR/SL/SR) on ADC1, scanned continuously by circular
   DMA into a 16x oversampling buffer; `ir_mm()` applies a cubic calibration
-  (float, Horner). Raw calibration tables in `src/calib.txt`.
+  (float, Horner). Raw calibration tables in `firmware/src/calib.txt`.
 - The side sensors SL/SR are mounted at the nose, angled 15 deg forward (not
   perpendicular). Stopped too far forward or yawed, their beam leaves the cell
   by the post and reports a phantom side wall (yawed left: SR; right: SL).
@@ -79,12 +87,12 @@ Goal configuration:
   `GPIO_NOPULL` with external resistors, debounced in SysTick (20 ms) because
   motor PWM noise can glitch them.
 - HC-05 Bluetooth on USART3 (9600 baud), `/dev/rfcomm0` on the PC (RFCOMM
-  channel 1, see `tools/rfcomm_reconnect.sh`).
-- `MOTORS_ENABLED` in `src/motor.h` is a hard kill-switch (0 = bridge never
+  channel 1, see `software/rfcomm_reconnect.sh`).
+- `MOTORS_ENABLED` in `firmware/src/motor.h` is a hard kill-switch (0 = bridge never
   driven, for bench testing on USB power). Currently 1.
 
 ## Build / flash / test
-Environments in `platformio.ini` (`default_envs = competition`):
+Environments in `firmware/platformio.ini` (`default_envs = competition`):
 - `competition`: robot firmware (`main.c`), 16x16 competition goal, without
   the development tools (`DEV_TOOLS` 0: no `CAL` recorder, no register
   lines in `STATUS`; `TUNE` stays).
@@ -92,11 +100,11 @@ Environments in `platformio.ini` (`default_envs = competition`):
 - `dev`: `-DDEV_TOOLS=1`, the competition goal with the tools (tests on a
   large stretch; same saved record as `competition`).
 - `uart_test`, `diag_test`: hardware smoke tests (UART loopback; LED + IR +
-  encoder panel for `tools/dashboard.py`). They exclude the app modules
+  encoder panel for `software/dashboard.py`). They exclude the app modules
   (`[common] app_sources`).
 - `virtual`: the robot firmware on the real chip with
-  `motion.c`/`control.c`/`path.c` replaced by `src/test_virtual.c`, which
-  builds `test/host/sim.c` in
+  `motion.c`/`control.c`/`path.c` replaced by `firmware/src/test_virtual.c`, which
+  builds `firmware/test/host/sim.c` in
   (`SIM_ON_ROBOT`): every move is resolved cell by cell in a built-in 16x16
   maze (`VIRTUAL_SEED`) and takes its simulated time for real; each run
   starts with the virtual robot at the start. The wheels stay still unless
@@ -108,12 +116,13 @@ Environments in `platformio.ini` (`default_envs = competition`):
   current move (a race stopped on its way to the goal still gets there). Its records carry another maze signature: the real firmware
   ignores them (`ERASE` after flashing it back).
 
-Commands:
+Commands (`pio` inside `firmware/`, or `pio run -d firmware ...` from the
+root; everything else from the root):
 - `pio run` builds the robot firmware; `pio run -e <env>` any other.
 - `pio run -t upload` flashes the robot firmware (only it, thanks to
   `default_envs`; without it every env was flashed in turn, the last winning).
-- `make -C test/host` builds and runs the host test suite (see below).
-  `test/host/build/host_tests --demo` shows a full search + speed run log and
+- `make -C firmware/test/host` builds and runs the host test suite (see below).
+  `firmware/test/host/build/host_tests --demo` shows a full search + speed run log and
   the ASCII map exactly as the robot prints them; `--transcript <seed>
   <openings> [practice] [phantom]` prints everything the robot would send
   over Bluetooth (telemetry included) during a search + speed run;
@@ -126,9 +135,9 @@ Commands:
   (the robot prints the worst one's time and pops after a run);
   `--mazefile <files>` runs the whole cycle on real competition mazes
   (text files of github.com/micromouseonline/mazefiles, cloned outside the
-  repo: 520 classic 16x16). `tools/plan_cycles.py` runs the firmware ELF's
+  repo: 520 classic 16x16). `software/plan_cycles.py` runs the firmware ELF's
   planner on an emulated M3 (unicorn): cycles per pop without the robot.
-- `python3 -m unittest discover -s tools -p 'test_*.py'`: monitor and
+- `python3 -m unittest discover -s software -p 'test_*.py'`: monitor and
   calibration analysis tests. They replay `--transcript` output, so they also
   check that the monitor's planner makes the same decisions as the firmware.
 - CI (`.github/workflows/ci.yml`) builds all envs and runs both test suites.
@@ -143,7 +152,7 @@ SWD/USB cable first (`lsusb` should show 0483:3748).
 0x0800F800) store the map; the build fails if the program would grow into
 them.
 
-## Architecture (`src/`)
+## Architecture (`firmware/src/`)
 Strategy code is pure C with no HAL, so the same files run on the PC tests.
 
 - `robot_config.h`: every compile-time constant with its unit (geometry,
@@ -176,7 +185,7 @@ Strategy code is pure C with no HAL, so the same files run on the PC tests.
   cells' centre lines, a clothoid-arc-clothoid 90 deg curve inside every cell
   where the route turns, speed limits and braking for the curves and the end.
 - `motion.h`: the robot actions the strategies use. `motion.c` implements
-  them on the robot; `test/host/sim.c` implements them in a simulated maze.
+  them on the robot; `firmware/test/host/sim.c` implements them in a simulated maze.
 - `motion.c`: SysTick steps the profiles (or the path), the centring and the
   loops every millisecond and drives the motors; the move functions (main
   context) watch the sensors and decide when a move is over. Every forward
@@ -200,12 +209,12 @@ Strategy code is pure C with no HAL, so the same files run on the PC tests.
   (pins/DMA/IRQs), `sysclock.c`, `stm32f1xx_it.c` (SysTick, fault handlers),
   `error.c`, `stm32f1xx_hal_conf.h`.
 - `test_uart.c`, `test_diag.c`: entry points of the smoke-test envs.
-- `test/host/`: `sim.c` implements `motion.h` in a simulated maze (strategy
+- `firmware/test/host/`: `sim.c` implements `motion.h` in a simulated maze (strategy
   tests); `control_sim.c` runs `control.c` (and `path.c`: `sim_path()`)
   against simulated motors (first order, friction, stiction, dead time),
   quantised encoders, delayed side IR and the chassis' stick-slip in yaw
   (speed-control tests).
-- `tools/robot_monitor.py`: live maze monitor + console (no curses: escape
+- `software/robot_monitor.py`: live maze monitor + console (no curses: escape
   codes in 24-bit colour, raw keys). Rebuilds the map from the telemetry,
   recomputes the route with a Python port of the planner (costs read from
   `robot_config.h`), paints the maze as pixels (`MazePainter`: sextants,
@@ -213,12 +222,12 @@ Strategy code is pure C with no HAL, so the same files run on the PC tests.
   `Terminal` sends only what changed (clipped, resize-safe). `Effects`
   holds what the telemetry does not carry: the drawn robot's glide and
   trail, the run's clock, the banners. Records sessions
-  to `tools/logs/`, replays them (`--replay`), saves `@D` dumps as CSV in
-  `tools/calib_data/` (`/note` appends measurements).
-- `tools/calib_analyze.py`: reports and suggested constants from those CSVs;
+  to `software/logs/`, replays them (`--replay`), saves `@D` dumps as CSV in
+  `software/calib_data/` (`/note` appends measurements).
+- `software/calib_analyze.py`: reports and suggested constants from those CSVs;
   `--chain` follows the encoder heading against the walls over a session;
   `--delay` measures the IR delays (turns, wall approaches).
-- `tools/dashboard.py`: live panel for `diag_test`.
+- `software/dashboard.py`: live panel for `diag_test`.
 
 ## Operating the robot
 - After boot the LEDs sweep 1 -> 6 -> 1 until SELECT picks mode 1 (START
@@ -284,11 +293,11 @@ search leg; the dump comes when the run ends).
   experiment histories go to `docs/measurements.md`.
 - `stm32f1xx_hal_conf.h` needs `board_build.stm32cube.custom_config_header =
   yes`, or the framework silently uses its own copy.
-- `src/system_stm32f1xx.c` (vendor file) has CRLF line endings: edit it
+- `firmware/src/system_stm32f1xx.c` (vendor file) has CRLF line endings: edit it
   with a tool that keeps them, or the whole file turns over in the diff.
 - Keep strategy and control code (`maze`, `search`, `storage`, `params`,
   `crc32`, `telemetry`, `control`) free of HAL includes and run `make -C
-  test/host` after touching it. Headers used by it (`motion.h`, `uart.h`,
+  firmware/test/host` after touching it. Headers used by it (`motion.h`, `uart.h`,
   `flash_store.h`) must stay HAL-free too.
 - A move only updates the pose when it is confirmed (`MOVE_OK`). `MOVE_BLOCKED`
   means the robot stopped at a known cell centre facing a wall (backed up to
@@ -372,7 +381,7 @@ search leg; the dump comes when the run ends).
 - Telemetry is sent only between actions, never from a control loop. Any map
   change the per-cell `@C` lines do not cover must be followed by
   `telemetry_map()` (see the map repair in `plan_explore()`).
-- `tools/robot_monitor.py` ports `maze_plan_to/from`, `maze_best_action`
+- `software/robot_monitor.py` ports `maze_plan_to/from`, `maze_best_action`
   (same tie order), `maze_route()` with the route text of the log ("2R1L3":
   cells, then a curve right/left in the last of them) and the OPTIM
   candidates. Change both together; the transcript tests fail if they

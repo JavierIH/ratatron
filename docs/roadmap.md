@@ -12,7 +12,7 @@ state of each issue in `ISSUES.md`.
 - Simulator: 523 of 523 searches end with the optimal path verified,
   182 s on average; 0 searches fail in 4184 with 3 % noise (4 before
   11-11); the race's route to the goal takes 17.5 s at 900/400.
-  `make -C test/host`: 3963 checks; tools: 34 tests.
+  `make -C firmware/test/host`: 3963 checks; tools: 34 tests.
 - Robot: flashed 11-13 (`practice`) with all of it, and validated that
   day (`docs/testing.md`, session of 11-13): the wall-end hold of the
   centring (GitHub issue #1), `IR_DELAY_MS` 22, races that only read the

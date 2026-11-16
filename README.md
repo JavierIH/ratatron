@@ -1,7 +1,17 @@
-# rat_sw
+# RATATRON
 
-Micromouse firmware for an STM32F103 robot: it explores an unknown maze,
-maps it, works out the fastest route and runs it.
+A micromouse: an STM32F103 robot that explores an unknown maze, maps it,
+works out the fastest route and runs it. Everything about it lives here:
+
+| Folder | What |
+|---|---|
+| [electronics/](electronics/) | the board (KiCad) |
+| [mechanics/](mechanics/) | the body and parts (FreeCAD, STL) |
+| [firmware/](firmware/) | the robot's code (PlatformIO, bare STM32 HAL) and its PC tests |
+| [software/](software/) | the PC tools: live monitor, Bluetooth logger, calibration analysis, session logs |
+| [docs/](docs/) | design, measurements, tests, faults ([index](docs/README.md)) |
+
+The firmware:
 
 - **Search** (mode 1): explores to the goal and saves the map in flash there
   (3 slow blinks: saved); keeps exploring only the cells that could still
@@ -46,8 +56,8 @@ continuous fast blink = `Error_Handler`; continuous slow blink = CPU fault
 ## Live monitor
 
 ```
-python3 tools/robot_monitor.py                 # /dev/rfcomm0 at 9600 baud
-python3 tools/robot_monitor.py --replay tools/logs/<session>.log --speed 4
+python3 software/robot_monitor.py                 # /dev/rfcomm0 at 9600 baud
+python3 software/robot_monitor.py --replay software/logs/<session>.log --speed 4
 ```
 
 ![The monitor: a search and a speed run](docs/img/robot_monitor.gif)
@@ -80,7 +90,7 @@ with half blocks, two pixels to a character.
 - Keys: Enter sends, Up/Down history, PgUp/PgDn scroll the log, Tab shows
   the help, **Ctrl+X sends STOP**, Esc quits. Local commands: `/full` (always
   16x16), `/pixels`, `/effects`, `/clear`, `/note`.
-- Every session is recorded in `tools/logs/` and can be replayed with
+- Every session is recorded in `software/logs/` and can be replayed with
   `--replay`.
 - The robot sends its telemetry (`@...` lines of ~20 bytes) only between
   actions; the monitor only transmits when you type (plus a `SYNC` on
@@ -131,7 +141,7 @@ Only in the `practice` and `dev` builds (the competition one leaves the
 recorder out). During a test the robot records the encoders, the PWM applied and the 4 raw
 IR every 2-10 ms (if they do not fit, it spaces the samples out instead of
 cutting the end) and dumps them when it ends; the monitor saves them as CSV
-in `tools/calib_data/` with every firmware constant. The tests that move the
+in `software/calib_data/` with every firmware constant. The tests that move the
 robot wait 2 s (START or STOP cancel).
 
 | Test | What to do | Calibrates |
@@ -147,7 +157,7 @@ robot wait 2 s (START or STOP cancel).
 | `CAL DUMP` | — | sends the last recording again |
 
 ```
-python3 tools/calib_analyze.py tools/calib_data/*.csv
+python3 software/calib_analyze.py software/calib_data/*.csv
 ```
 
 summarises every file and, with the notes, suggests concrete values (for
@@ -156,18 +166,23 @@ delay from in-place turns and wall approaches (docs/testing.md).
 
 ## Build, flash and test
 
+`pio` runs inside `firmware/` (or from the root with `-d firmware`); the
+rest from the root.
+
 ```
+cd firmware
 pio run                  # robot firmware, 16x16 goal, no CAL (competition)
 pio run -t upload        # flash it (ST-Link with openocd, see AGENTS.md)
 pio run -e practice -t upload   # 4x3 practice maze, with CAL and STATUS registers
 pio run -e dev -t upload        # 16x16 goal with CAL and STATUS registers
-make -C test/host        # PC tests: planner, strategies and simulator
-test/host/build/host_tests --demo   # log and map of a simulated search
-python3 -m unittest discover -s tools -p 'test_*.py'   # monitor and analysis
+cd ..
+make -C firmware/test/host        # PC tests: planner, strategies and simulator
+firmware/test/host/build/host_tests --demo   # log and map of a simulated search
+python3 -m unittest discover -s software -p 'test_*.py'   # monitor and analysis
 ```
 
 Hardware test environments: `pio run -e uart_test` and `pio run -e
-diag_test` (the latter with `tools/dashboard.py`). `pio run -e virtual -t
+diag_test` (the latter with `software/dashboard.py`). `pio run -e virtual -t
 upload`: the virtual robot, the robot firmware with a built-in 16x16 maze;
 search and races run through it at real speed, the search saving to the
 real flash (to test saves without a maze). The wheels stay still unless `TUNE WHEELS 1`

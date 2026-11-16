@@ -7,7 +7,7 @@ reached, how to reproduce each one, the diagnosis and the fixes, with their
 validation status. The earlier history of the flash freezes is in
 `docs/faults/freezes.md`; the open work in `docs/ISSUES.md` (issues 15, 17, 18).
 
-Log of the investigation: `tools/logs/2026-10-04_19-29-11.log` (times below are
+Log of the investigation: `software/logs/2026-10-04_19-29-11.log` (times below are
 its seconds, t=0 at 19:29:11). Every number here comes from it or from the
 host tests.
 
@@ -94,7 +94,7 @@ failed race (map lost)". Each of its points, and what came of it:
 
 ### 2.1 How it was found
 
-A test firmware was built for the purpose, `env:virtual` (`src/test_virtual.c`,
+A test firmware was built for the purpose, `env:virtual` (`firmware/src/test_virtual.c`,
 see AGENTS.md "Environments"): the robot firmware on the real chip and flash,
 with `motion.c` replaced by the host simulator in a built-in 16x16 maze.
 Step by step:
@@ -236,7 +236,7 @@ ground: the virtual firmware moves them blind.
   cut 13 s into the way back (t=3405) kept the map, the next race ran at
   cost 106 (the optimum); `RESET`s in the way back of a search and of a race
   kept it (t=4018, 4048; again with the wheels turning, t=5204, 5231).
-- Reproduce: host `make -C test/host` (test_run_control); robot: virtual
+- Reproduce: host `make -C firmware/test/host` (test_run_control); robot: virtual
   firmware, `ERASE`, mode 1, cut the power after the goal's blinks.
 
 ## 4. Fault 3: the map repair could loop until the search gave up
@@ -255,7 +255,7 @@ ground: the virtual firmware moves them blind.
 - Fix (3eaf8cb): repairs only at rest (on the way the leg stops), and the
   first pass keeps the walls of the robot's cell. Host tests pass; the
   simulator counts UART waits inside the legs' decisions (must stay 0).
-- Reproduce: `make -C test/host`; reverting either half makes
+- Reproduce: `make -C firmware/test/host`; reverting either half makes
   test_repair_at_rest fail.
 
 ## 5. Smaller findings
@@ -270,7 +270,7 @@ ground: the virtual firmware moves them blind.
 - Bluetooth: after a power-on the HC-05 connects after the boot banner (lost:
   send `STATUS`); lines sent while it is not connected arrive in a burst
   later; a power-off is noticed ~20 s later (supervision timeout).
-- Development: `src/system_stm32f1xx.c` has CRLF line endings; rewriting it
+- Development: `firmware/src/system_stm32f1xx.c` has CRLF line endings; rewriting it
   with a tool that normalises them turned the whole file over in 352bce9
   (restored byte for byte in 286a4fd).
 

@@ -14,8 +14,8 @@ at 600. Charge the battery first (11-13: `pace=90-95%` at 900).
 
 Flashed `practice` 20:11 (the audit of 11-11, the wall-end hold,
 `IR_DELAY_MS` 22), layout I with a wall east of (0,0), some dust on the
-floor. Log `tools/logs/2026-11-13_20-12-41.log`, recordings
-`tools/calib_data/2026-11-13_*`. No "!!" line but the one step 3 asks for.
+floor. Log `software/logs/2026-11-13_20-12-41.log`, recordings
+`software/calib_data/2026-11-13_*`. No "!!" line but the one step 3 asks for.
 
 1. Wall ends (`docs/faults/centring.md`, section 12). The 10-08
    `SLIPPED` case, `CAL STRAIGHT 2 300` from (1,2) east right after
@@ -61,7 +61,7 @@ saves: 2 searches, `ERASE`): the next power-on compacts it.
 ## Robot session of 10-08 (results)
 
 The plan of 10-06, flashed `practice` 18:58 (KP 8 / KD 0.6), layout I
-with a wall east of (0,0). Recordings `tools/calib_data/2026-10-08_*`.
+with a wall east of (0,0). Recordings `software/calib_data/2026-10-08_*`.
 
 1. Boot: no "!!", stack 2240 B free, SysTick worst 5 us at rest.
 2. Lighting, `CHECK` three times (centred, ~10 mm left and right): FAIL
@@ -163,7 +163,7 @@ The firmware is the same code: the map, the planner and the flash record
 are sized 16x16 in every build (`PRACTICE_MAZE` only changes the goal), and
 the Bluetooth traffic per cell is the same (a whole 16x16 cycle is ~14 KB of
 telemetry and log, spread over minutes). The strategy is tested in the
-simulator: `make -C test/host` runs 600 random 16x16 mazes (search 47-111 s
+simulator: `make -C firmware/test/host` runs 600 random 16x16 mazes (search 47-111 s
 simulated, every one verified optimal with perfect sensing).
 
 Real competition mazes: `host_tests --mazefile` over the 520 classic
@@ -184,7 +184,7 @@ min more of search in them (the other 517 finish under 400). Set to 800
    (`host_tests --timing`), so a practice search measures it: the robot
    prints `decisions on the way: N, worst X us (P pops), late L` after
    the run. Cost a pop = X / P. Real mazes are worse than random ones: the
-   worst decision in the 520 pops 5144. `tools/plan_cycles.py` (emulated
+   worst decision in the 520 pops 5144. `software/plan_cycles.py` (emulated
    M3, a cycle model) gave 235 cycles a pop, ~17 ms for 5144: no margin.
    The planner's loop was rewritten (same results: transcripts and the 520
    mazes identical): 133 cycles a pop, ~9.5 ms + the rest of the decision.
@@ -311,7 +311,7 @@ The firmware pairs the front readings with where the robot was
 the search legs' front decisions, `SEARCH_LEG_SPEED_MAX`); the centring
 assumes nothing, and the simulator gives the side IR 8 ms
 (`SIDE_IR_DELAY_MS`). The only measurement behind the 50 is a front wall
-approached at 400 mm/s (docs/measurements.md). `tools/calib_analyze.py
+approached at 400 mm/s (docs/measurements.md). `software/calib_analyze.py
 --delay` measures every recording at hand (all of them up to 10-05):
 
 | Method | FL | FR | SL | SR |
@@ -343,7 +343,7 @@ On the robot (no flash needed; short batches for the battery):
    slide keeps the same mm, so its ms falls as 1/speed.
 3. **Slide** (only if 2 points at one): the 600 mm/s runs again with `ACCEL
    2000`; a slide shrinks with gentler braking, a delay does not.
-4. Then `python3 tools/calib_analyze.py --delay tools/calib_data/<new>*.csv`.
+4. Then `python3 software/calib_analyze.py --delay software/calib_data/<new>*.csv`.
 
 If the front delay is not 50: try it live with `TUNE IR_DELAY <ms>` and
 check the stops on end walls (`end=IR`, FL/FR ~85/101 squared, err a few

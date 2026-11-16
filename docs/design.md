@@ -291,7 +291,7 @@ behind the constants: docs/measurements.md. AGENTS.md has the rules.
 
 ## Telemetry (`telemetry.c`)
 
-Machine-readable lines for tools/robot_monitor.py (live maze view). All
+Machine-readable lines for software/robot_monitor.py (live maze view). All
 start with '@', are at most 21 bytes and are only sent between actions,
 never from a control loop. TELEM OFF silences them. `@D` lines are
 calibration dumps (`calib.c`).

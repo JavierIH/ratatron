@@ -4,7 +4,7 @@
 |---|---|
 | [ISSUES.md](ISSUES.md) | open issues (state and next step) and the closed ones; start here |
 | [design.md](design.md) | how and why the firmware works as it does: speed control, IR, centring, curves, search legs, planner costs, health checks, clock, telemetry format |
-| [measurements.md](measurements.md) | the numbers behind the constants in `src/robot_config.h` |
+| [measurements.md](measurements.md) | the numbers behind the constants in `firmware/src/robot_config.h` |
 | [testing.md](testing.md) | what was validated on the robot, getting ready for a 16x16 without one, the competition checklist |
 | [mazes.md](mazes.md) | the practice maze's test layouts A-I, drawn |
 | [roadmap.md](roadmap.md) | what to do next, in order: robustness, simplicity, efficiency, each with its numbers |

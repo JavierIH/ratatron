@@ -78,8 +78,8 @@ the firmware of the time (KP 0.5, KI 20, observer 40 mm, `STEER_MAX_DEG` 15,
 
 Layout I (`docs/mazes.md`), row 0 (4 cells, 540 mm between the corner cells'
 centres; the corner cells have one side wall), `CAL STRAIGHT 3 <mm/s>`, KP
-0.5, KI 20; recordings in `tools/calib_data/2026-10-05_*_straight.csv`,
-summarised with `tools/calib_analyze.py` (error every 45 mm, positive = left
+0.5, KI 20; recordings in `software/calib_data/2026-10-05_*_straight.csv`,
+summarised with `software/calib_analyze.py` (error every 45 mm, positive = left
 of the centre line, as the side IR read it: ~1 mm per deg of yaw too, the
 sensors are at the nose).
 
@@ -167,7 +167,7 @@ whatever the control does (it backs up: `BLOCKED`).
 
 ## 5. Changes
 
-In `steer_step()` (`src/control.c`); constants in `src/robot_config.h`, each
+In `steer_step()` (`firmware/src/control.c`); constants in `firmware/src/robot_config.h`, each
 live with `TUNE` (name in brackets):
 
 - Trusted readings, used however far off, the observer learning from them:
@@ -195,7 +195,7 @@ removed the swing of fault 6; removed before flashing, at the user's call.
 
 ## 6. The simulator
 
-- `test/host/control_sim.c`: the side readings are geometry, the beams 15
+- `firmware/test/host/control_sim.c`: the side readings are geometry, the beams 15
   deg forward from the nose, scaled to read 1:1 with the lateral position:
   the same `side_lever_mm` (55 mm per radian) for small yaws as before, and
   at a big yaw one beam reads long, then no wall, and the two disagree. The
@@ -309,7 +309,7 @@ of the old controller removed.
 
 Flashed with `practice` (KP 8, KD 0.6); layout I with a wall east of
 (0,0); `CAL STRAIGHT 3` along row 2 (one wall continuous, the other only
-in the middle two cells). Recordings `tools/calib_data/2026-10-08_*`.
+in the middle two cells). Recordings `software/calib_data/2026-10-08_*`.
 
 - Crooked starts, centred, every one `end=IR` square to the end wall, no
   touch (the start angle is the turn the encoders measured; "centred" is
@@ -425,7 +425,7 @@ came after it) still counts once (a ~2 deg kick).
 ## 12. The fix on the robot (11-13)
 
 Flashed 11-13, layout I with a wall east of (0,0)
-(`tools/calib_data/2026-11-13_*`; `docs/testing.md`, session of 11-13):
+(`software/calib_data/2026-11-13_*`; `docs/testing.md`, session of 11-13):
 
 - The 10-08 `SLIPPED` case (`CAL STRAIGHT 2 300` from (1,2) east right
   after a `CAL CURVE`): `end=IR`, err 1.73 deg (15.67 then).

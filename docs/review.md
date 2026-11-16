@@ -114,7 +114,7 @@ means retuning a dozen constants (centre left 89 vs right 76, front offset
 ## Review of 2026-10-22 (paused)
 
 The user asked for a critical review of everything, from scratch; paused at
-the user's request. Read in full: every firmware module in `src/`, the
+the user's request. Read in full: every firmware module in `firmware/src/`, the
 control simulator, this file, `design.md`, `testing.md`,
 `faults/centring.md`; only skimmed: the tools, `test_main.c`, `sim.c`.
 
@@ -148,8 +148,8 @@ Items 1-6 done 11-11 (flash -24 B: `competition` 53984 B, `practice`
 
 ### Still to review
 
-`tools/robot_monitor.py` and `tools/calib_analyze.py` (structure only so
-far), `test/host/sim.c`, most of `test_main.c`, `docs/lighting.md`,
+`software/robot_monitor.py` and `software/calib_analyze.py` (structure only so
+far), `firmware/test/host/sim.c`, most of `test_main.c`, `docs/lighting.md`,
 `docs/mazes.md`, `docs/faults/freezes.md`, `docs/faults/oshwdem2026.md`.
 
 ### Questions and proposals (the user's call, or a measurement first)
@@ -200,13 +200,13 @@ far), `test/host/sim.c`, most of `test_main.c`, `docs/lighting.md`,
 
 ## Audit of 2026-11-11
 
-The user asked for an audit of `src/` and `tools/robot_monitor.py`: bugs,
+The user asked for an audit of `firmware/src/` and `software/robot_monitor.py`: bugs,
 simplification and efficiency, ranked, each with its evidence; nothing is
 fixed until the user picks. It goes in small steps, each written here
 before stopping (the user's rule, 11-11). Line numbers are those of
 45075fe.
 
-Baselines (11-11): `make -C test/host` 3939 checks, 0 failures.
+Baselines (11-11): `make -C firmware/test/host` 3939 checks, 0 failures.
 `--mazefile` on a fresh clone of the maze files: 523 of 525 classic 16x16
 load (520 on 09-27); search 182.1 s on average (195.2 with 3 % noise),
 every one optimal with perfect sensing, no blocked move, no crash, worst
@@ -216,7 +216,7 @@ decision 5144 pops. Sizes: `practice` RAM 84.4 % (17288 B), flash 93.9 %
 
 ### Step 1 (11-11): everything read once; the races write the map
 
-Read in full: every module of `src/` but the vendor files, `sim.c`,
+Read in full: every module of `firmware/src/` but the vendor files, `sim.c`,
 `robot_monitor.py`. Not yet: `calib_analyze.py`, `control_sim.c`, most of
 `test_main.c`. "Measured" below: reproduced in the simulator or found in a
 robot log; "read": from the code alone.
@@ -234,7 +234,7 @@ high; measured).**
   right: 0 in 1046 cycles on the real mazes (half of them with 3 %
   noise), 0 in the 900 random ones.
 - On the robot, 2026-09-26 19:31 (practice maze, a race's return;
-  `tools/logs/2026-09-26_11-22-09.log`, t=29370-29375):
+  `software/logs/2026-09-26_11-22-09.log`, t=29370-29375):
   `ruta 9 celdas, 0 curvas: fin=OBSTACULO dist=168.78/1433.59mm ...
   IR(FL=57 FR=113)`, `obstaculo delante: marcha atras OK`, `!! destino
   inalcanzable segun el mapa: olvido 1 paredes dudosas (reparacion 1/3)`,
