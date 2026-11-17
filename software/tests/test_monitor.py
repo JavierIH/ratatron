@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Tests for robot_monitor.py:  python3 -m unittest discover -s tools
+"""Tests for the monitor (software/ratatron/monitor/monitor.py):  python3 -m unittest discover -s tools
 
 The key test replays what the real firmware sends over Bluetooth during
 simulated runs (firmware/test/host --transcript) and checks, at every decision the
@@ -21,14 +21,14 @@ import time
 import unittest
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-ROOT = os.path.dirname(HERE)
-sys.path.insert(0, HERE)
+SOFTWARE = os.path.dirname(HERE)
+ROOT = os.path.dirname(SOFTWARE)
+sys.path.insert(0, SOFTWARE)
 
-import robot_monitor as rm  # noqa: E402
+from ratatron.monitor import monitor as rm  # noqa: E402
 
 HOST_DIR = os.path.join(ROOT, "firmware", "test", "host")
 HOST_TESTS = os.path.join(HOST_DIR, "build", "host_tests")
-MONITOR = os.path.join(HERE, "robot_monitor.py")
 ACTION_NAME = {"F": "FORWARD", "L": "LEFT", "R": "RIGHT", "U": "U-TURN", None: "-"}
 DECISION = re.compile(r"^(GOAL|OPTIM|RETURN) \((\d+),(\d+)\)([NESW]) F[01?] L[01?] R[01?] cost=(\d+) -> (.+)$")
 ROUTE = re.compile(r"^(FAST|RETURN) \((\d+),(\d+)\)([NESW]) turn (-?\d+) \+ route ([0-9RL]*\+?) \((\d+) cells\)$")
@@ -415,7 +415,8 @@ class TestTerminal(unittest.TestCase):
             try:
                 fcntl.ioctl(0, termios.TIOCSWINSZ, struct.pack("HHHH", rows, cols, 0, 0))
                 os.environ.update(TERM="xterm-256color", LANG="en_US.UTF-8", LC_ALL="en_US.UTF-8")
-                os.execv(sys.executable, [sys.executable, MONITOR] + args)
+                os.chdir(SOFTWARE)
+                os.execv(sys.executable, [sys.executable, "-m", "ratatron", "monitor"] + args)
             finally:
                 os._exit(127)
         output = bytearray()

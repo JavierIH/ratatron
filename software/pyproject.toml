@@ -1,0 +1,21 @@
+[build-system]
+requires = ["setuptools>=64"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "ratatron"
+version = "0.3.0"
+description = "Tools of the RATATRON micromouse: link, monitor, simulator, calibration"
+requires-python = ">=3.10"
+license = {text = "GPL-3.0"}
+dependencies = ["pyserial"]
+
+[project.optional-dependencies]
+sim = ["mujoco>=3.2", "numpy", "pillow", "pyte"]
+cycles = ["unicorn", "pyelftools"]
+
+[project.scripts]
+ratatron = "ratatron.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["ratatron*"]

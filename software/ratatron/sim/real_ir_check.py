@@ -7,8 +7,12 @@ from the raw ADC through the firmware's own calibration, the prediction from the
 (docs/mazes.md) with the simulator's rays. Residuals (measured - predicted) are reported on straights and in
 curves, for the readings within the sensors' range.
 
-    sim/.venv/bin/python sim/tools/real_ir_check.py LAYOUT run.csv ...     (LAYOUT: C, D, E, F of docs/mazes.md)
+    ratatron sim real-ir-check LAYOUT run.csv ...     (LAYOUT: C, D, E, F of docs/mazes.md)
 """
+import sys as _sys  # USAGE_GUARD
+if len(_sys.argv) < 3 or any(a in ('-h', '--help') for a in _sys.argv[1:]):
+    print(__doc__.strip())
+    raise SystemExit(0)
 import math
 import os
 import re
@@ -17,11 +21,9 @@ import sys
 
 import numpy as np
 
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from curve_ir_info import RANGE_MM, predict, wall_segments  # noqa: E402
-from ratsim import config as C  # noqa: E402
-from ratsim.maze import E, N, Maze  # noqa: E402
+from .curve_ir_info import RANGE_MM, predict, wall_segments
+from . import config as C
+from .maze import E, N, Maze
 
 LAYOUTS = {     # docs/mazes.md: (east of cells), (north of cells)
     'C': ([(0, 0), (1, 1), (2, 1)], [(0, 1), (2, 1)]),
@@ -52,7 +54,7 @@ def practice_maze(name):
 
 
 def sim_offsets():
-    """Reading = beam length + offset, as ratsim/robot.py sets them (the firmware's reference readings)."""
+    """Reading = beam length + offset, as sim/robot.py sets them (the firmware's reference readings)."""
     half = 0.5 * C.FW['LANE_WIDTH_MM']
     front_ref, skew = C.FW['FRONT_WALL_REF_MM'], C.FW['FRONT_SQUARE_OFFSET_MM']
     want = {'SL': C.FW['SIDE_CENTER_L_MM'], 'SR': C.FW['SIDE_CENTER_R_MM'],

@@ -6,7 +6,7 @@ diag_test firmware (firmware/src/test_diag.c) over a serial/RFCOMM link and rend
 them live in a colored terminal panel.
 
 Usage:
-    python3 software/dashboard.py [--port /dev/rfcomm0] [--baud 9600]
+    ratatron dashboard [--port /dev/rfcomm0] [--baud 9600]
 Press 'q' to quit.
 """
 import argparse

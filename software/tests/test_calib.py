@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Tests for calib_analyze.py with synthetic recordings of known physics.
+"""Tests for software/ratatron/calib/analyze.py with synthetic recordings of known physics.
 
 The recordings go through robot_monitor.CalibrationCapture exactly as a
 real '@D' dump would, so the whole CSV path is covered too.
@@ -13,10 +13,10 @@ import tempfile
 import unittest
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-sys.path.insert(0, HERE)
+sys.path.insert(0, os.path.dirname(HERE))
 
-import calib_analyze as ca  # noqa: E402
-import robot_monitor as rm  # noqa: E402
+from ratatron.calib import analyze as ca  # noqa: E402
+from ratatron.monitor import monitor as rm  # noqa: E402
 
 FL_CAL = (-0.00000002278, 0.000132, -0.2627, 237.7)
 INFO = [

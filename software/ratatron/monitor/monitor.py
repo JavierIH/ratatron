@@ -6,8 +6,8 @@ lines, see firmware/src/telemetry.h) next to the run log, and sends typed comman
 The planned route is recomputed here with the robot's own planner and costs
 (read from firmware/src/robot_config.h), so the drawing shows what the robot will do.
 
-    python3 software/robot_monitor.py [--port /dev/rfcomm0] [--baud 9600]
-    python3 software/robot_monitor.py --replay software/logs/<session>.log [--speed 4]
+    ratatron monitor [--port /dev/rfcomm0] [--baud 9600]   (default: the link ratatron connect shares)
+    ratatron monitor --replay software/logs/<session>.log [--speed 4]
 
 Sessions are recorded to software/logs/ (--no-record to disable) and can be
 replayed. Calibration dumps (CAL commands) are saved as CSV files in
@@ -40,10 +40,12 @@ try:
 except ImportError:     # only needed for a live connection, not for --replay or the tests
     serial = None
 
-HERE = os.path.dirname(os.path.abspath(__file__))
-CONFIG_H = os.path.join(HERE, "..", "firmware", "src", "robot_config.h")
-LOG_DIR = os.path.join(HERE, "logs")
-CALIB_DIR = os.path.join(HERE, "calib_data")
+from .. import paths
+
+CONFIG_H = os.path.join(paths.FIRMWARE, "src", "robot_config.h")
+LOG_DIR = paths.LOGS
+CALIB_DIR = paths.CALIB_DATA
+HUB_URL = "socket://%s:%d" % paths.HUB_ADDRESS
 
 MAZE = 16
 STATES = MAZE * MAZE * 4
@@ -463,7 +465,7 @@ class CalibrationCapture:
             path = os.path.join(self.directory, "%s_%s_%d.csv" % (stamp, test.lower(), suffix))
             suffix += 1
         with open(path, "x", encoding="utf-8") as f:
-            f.write("# rat_sw calibration data (software/calib_analyze.py)\n")
+            f.write("# rat_sw calibration data (software/ratatron/calib/analyze.py)\n")
             f.write("# captured: %s\n" % time.strftime("%Y-%m-%d %H:%M:%S"))
             f.write("# test: %s\n" % capture["test"])
             for info in capture["info"]:
@@ -1456,7 +1458,7 @@ def friendly_error(exc):
     if "exclusively lock" in low or "resource temporarily unavailable" in low:
         return "port held by another program (another monitor open?)"
     if "no such file" in low:
-        return "no such port (rfcomm bind? see software/rfcomm_reconnect.sh)"
+        return "no such port (rfcomm bind? see `sudo rfcomm bind 0 20:13:09:11:04:32 1` (ratatron connect needs none))"
     if "permission denied" in low:
         return "no permission on the port (dialout group)"
     if "host is down" in low or "connection refused" in low or "no route" in low:
@@ -1478,7 +1480,10 @@ class SerialLink(threading.Thread):
     def run(self):
         while not self.stop_event.is_set():
             try:
-                ser = serial.Serial(self.port, self.baud, timeout=0.1, exclusive=True)
+                if "://" in self.port:      # a pyserial URL: ratatron connect's shared link
+                    ser = serial.serial_for_url(self.port, self.baud, timeout=0.1)
+                else:
+                    ser = serial.Serial(self.port, self.baud, timeout=0.1, exclusive=True)
             except (serial.SerialException, OSError, ValueError) as exc:
                 self.on_status(False, friendly_error(exc))
                 self.stop_event.wait(1.0)
@@ -1910,7 +1915,8 @@ class Terminal:
 
 def parse_args(argv=None):
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("--port", default="/dev/rfcomm0", help="serial port (default /dev/rfcomm0)")
+    parser.add_argument("--port", help="serial port or pyserial URL (default: the link `ratatron connect` shares, "
+                                       "which records the session itself; else /dev/rfcomm0)")
     parser.add_argument("--baud", type=int, default=9600)
     parser.add_argument("--replay", metavar="FILE", help="replay a recorded session (or a transcript)")
     parser.add_argument("--speed", type=float, default=1.0, help="replay speed (default 1)")
@@ -1926,8 +1932,22 @@ def parse_args(argv=None):
     return parser.parse_args(argv)
 
 
+def hub_running():
+    import socket
+    try:
+        socket.create_connection(paths.HUB_ADDRESS, timeout=0.3).close()
+        return True
+    except OSError:
+        return False
+
+
 def main(argv=None):
     args = parse_args(argv)
+    if not args.port and not args.replay:
+        if hub_running():
+            args.port, args.no_record = HUB_URL, True   # ratatron connect records the session
+        else:
+            args.port = "/dev/rfcomm0"
     if not args.replay and serial is None:
         print("pyserial is missing: pip install pyserial (or use --replay)", file=sys.stderr)
         return 1

@@ -2,7 +2,7 @@
 """The firmware on many mazes: per maze a search, then races 2.4 and 2.6, in parallel; a summary per maze (CSV)
 and the incidents (pose lost, the hull touching a wall, failed runs, "!!" lines) for reading the logs.
 
-    sim/.venv/bin/python sim/tools/batch.py OUT_DIR maze.txt ... [--workers 10] [--races "2 4,2 6"]
+    ratatron sim batch OUT_DIR maze.txt ... [--workers 10] [--races "2 4,2 6"]
 """
 import argparse
 import csv
@@ -14,15 +14,14 @@ import sys
 import time
 from concurrent.futures import ThreadPoolExecutor
 
-SIM = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-PY = os.path.join(SIM, '.venv', 'bin', 'python')
+from .. import paths
 
 
 def run_one(maze, out, races, max_s, maps=None):
     name = os.path.splitext(os.path.basename(maze))[0]
     log = os.path.join(out, name + '.log')
     flash = os.path.join(out, name + '.bin')
-    cmd = [PY, os.path.join(SIM, 'run.py'), '--headless', '--speed', '0', '--no-pty', '--flash', flash,
+    cmd = [sys.executable, '-m', 'ratatron', 'sim', '--headless', '--speed', '0', '--no-pty', '--flash', flash,
            '--maze', maze, '--timestamps', '--max-s', str(max_s), '--until-idle']
     if maps:        # the map a search saved before: only the races (for changes the search does not use)
         shutil.copy(os.path.join(maps, name + '.bin'), flash)
@@ -80,7 +79,7 @@ def main():
     p.add_argument('--maps', help='a batch dir whose saved maps (*.bin) replace the search')
     a = p.parse_args()
     os.makedirs(a.out, exist_ok=True)
-    subprocess.run(['make', '-s', '-C', os.path.join(SIM, 'fw')], check=True)
+    subprocess.run(['make', '-s', '-C', os.path.join(paths.SIM, 'fw')], check=True)
     races = [r.strip() for r in a.races.split(',') if r.strip()]
     rows, t0 = [], time.monotonic()
     with ThreadPoolExecutor(a.workers) as ex:

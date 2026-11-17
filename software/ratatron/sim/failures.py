@@ -1,8 +1,12 @@
 #!/usr/bin/env python3
 """The failed runs of a batch (tools/batch.py OUT_DIR), one line each: phase, race, how far along its route, why.
 
-    sim/.venv/bin/python sim/tools/failures.py OUT_DIR
+    ratatron sim failures OUT_DIR
 """
+import sys as _sys  # USAGE_GUARD
+if len(_sys.argv) < 2 or any(a in ('-h', '--help') for a in _sys.argv[1:]):
+    print(__doc__.strip())
+    raise SystemExit(0)
 import glob
 import os
 import re

@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """Summarise calibration recordings from the robot (CAL commands).
 
-    python3 software/calib_analyze.py software/calib_data/*.csv
+    ratatron calib software/calib_data/*.csv
 
-Each CSV (saved by robot_monitor.py) carries the test, every relevant
+Each CSV (saved by ratatron connect or the monitor) carries the test, every relevant
 firmware constant and the samples. Physical measurements added with
 /note in the monitor turn the report into concrete suggestions:
 
@@ -22,7 +22,7 @@ motor model constants (MOTOR_KV_L/R, MOTOR_KS_PWM, MOTOR_TAU_S). Moves
 recorded before the speed control (2026-09-23/24, no reference) are listed
 but not analysed.
 
-    python3 software/calib_analyze.py --chain software/calib_data/2026-09-26_20-*.csv
+    ratatron calib --chain software/calib_data/2026-09-26_20-*.csv
 
 follows the heading over a whole session of moves (the ring, layout F):
 how far the encoders drift from the robot's real heading, move by move.

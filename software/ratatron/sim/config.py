@@ -2,9 +2,10 @@
 import os
 import re
 
-ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-FIRMWARE_SRC = os.path.join(ROOT, 'firmware', 'src')
-SIM_DIR = os.path.join(ROOT, 'sim')
+from .. import paths
+
+FIRMWARE_SRC = os.path.join(paths.FIRMWARE, 'src')
+SIM_DIR = paths.SIM
 ASSETS = os.path.join(SIM_DIR, 'assets')
 
 

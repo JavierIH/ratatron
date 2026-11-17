@@ -3,7 +3,7 @@
 #   make              competition goal (16x16 centre), with the development tools (CAL)
 #   make PRACTICE=1   the 4x3 practice goal
 
-FW       := ../../firmware/src
+FW       := ../../../../firmware/src
 APP      := main motion control path search maze commands storage params crc32 telemetry calib gpio infrared
 SIM      := sim_chip.c sim_drivers.c
 PRACTICE ?= 0

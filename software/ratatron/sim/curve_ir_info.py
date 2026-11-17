@@ -8,7 +8,7 @@ moved by a known error (along the corridor, across it, heading) and a least-squa
 (the maze's walls and posts ray-cast as the simulator does) against the measured ones tries to find it again.
 The spread of what it finds is how well the curve's readings fix the position.
 
-    sim/.venv/bin/python sim/tools/curve_ir_info.py MAZE FLASH RACE [--trials 20]
+    ratatron sim curve-ir-info MAZE FLASH RACE [--trials 20]
 """
 import argparse
 import math
@@ -21,11 +21,10 @@ import tempfile
 
 import numpy as np
 
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from ratsim import config as C  # noqa: E402
-from ratsim.firmware import build  # noqa: E402
-from ratsim.maze import Maze  # noqa: E402
-from ratsim.robot import IR_FAR_MM, IR_PERIOD_MS, IR_SPREAD_DEG, Robot  # noqa: E402
+from . import config as C
+from .firmware import build
+from .maze import Maze
+from .robot import IR_FAR_MM, IR_PERIOD_MS, IR_SPREAD_DEG, Robot
 
 RANGE_MM = 150.0        # GP2Y0A51SK0F: 2-15 cm
 

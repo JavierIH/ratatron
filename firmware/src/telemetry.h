@@ -4,7 +4,7 @@
 #include <stdint.h>
 #include "maze.h"
 
-// '@' lines for software/robot_monitor.py, sent only between actions (format: docs/design.md, telemetry).
+// '@' lines for software/ratatron/monitor/monitor.py, sent only between actions (format: docs/design.md, telemetry).
 
 typedef enum {
     TM_IDLE      = 'I',

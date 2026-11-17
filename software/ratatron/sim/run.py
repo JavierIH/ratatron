@@ -1,17 +1,17 @@
 #!/usr/bin/env python3
 """RATATRON in MuJoCo: the robot's firmware (firmware/src, unchanged) driving the CAD robot in a 16x16 maze.
 
-    sim/.venv/bin/python sim/run.py                          # random maze (seed 1), viewer, console on stdin
-    sim/.venv/bin/python sim/run.py --maze sim/mazes/x.txt   # a maze file (micromouseonline format)
-    sim/.venv/bin/python sim/run.py --headless --speed 0 --cmd "MODE 1" --cmd START --until-idle
+    ratatron sim                          # random maze (seed 1), viewer, console on stdin
+    ratatron sim --maze oshwdem2026                     # a maze of sim/mazes, or any maze file (micromouseonline)
+    ratatron sim --headless --speed 0 --cmd "MODE 1" --cmd START --until-idle
 
 Console: every line goes to the firmware as over Bluetooth (MODE 1, START, STOP, MAP, STATUS, ...), except
     :start :select      press a button          :place x y [N|E|S|W]   put the robot at a cell centre
     :reset              power cycle (map kept)   :erase-flash           power cycle with blank flash
     :speed f            real-time factor (0 = as fast as possible)       :quit
 Viewer keys: Page Up = SELECT, Page Down = START, End = back to the start cell.
-The monitor, as with the robot: `python3 software/robot_monitor.py --port sim/build/tty` (a pseudo-terminal the
-simulator opens; the monitor's console commands, SYNC, the map and the route all work through it).
+The monitor, as with the robot: `ratatron connect --sim`, then `ratatron monitor` (the console, SYNC, the map
+and the route all work through it).
 """
 import argparse
 import os
@@ -20,18 +20,29 @@ import sys
 import threading
 import time
 
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from ratsim.firmware import STATE_NAMES, build          # noqa: E402
-from ratsim.maze import Maze                            # noqa: E402
-from ratsim.robot import Robot                          # noqa: E402
+from .. import paths
+from .firmware import STATE_NAMES, build
+from .maze import Maze
+from .robot import Robot
 
 KEY_PAGE_UP, KEY_PAGE_DOWN, KEY_END = 266, 267, 269
+MAZES = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'mazes')
+
+
+def maze_path(name):
+    """A maze file, or the name of one in sim/mazes (`oshwdem2026`)."""
+    if os.path.exists(name):
+        return name
+    bundled = os.path.join(MAZES, name if name.endswith('.txt') else name + '.txt')
+    if os.path.exists(bundled):
+        return bundled
+    raise SystemExit(f'no maze {name!r} (the bundled ones: {", ".join(sorted(f[:-4] for f in os.listdir(MAZES)))})')
 
 
 class Session:
     def __init__(self, args):
         self.args = args
-        self.maze = Maze.load(args.maze) if args.maze else Maze.generate(seed=args.seed, loops=args.loops)
+        self.maze = Maze.load(maze_path(args.maze)) if args.maze else Maze.generate(seed=args.seed, loops=args.loops)
         os.makedirs(os.path.dirname(args.flash), exist_ok=True)
         if args.erase_flash and os.path.exists(args.flash):
             os.remove(args.flash)
@@ -292,7 +303,7 @@ def make_parser():
     p.add_argument('--seed', type=int, default=1, help='generated maze and sensor noise seed')
     p.add_argument('--loops', type=float, default=0.08, help='generated maze: share of walls removed (loops)')
     p.add_argument('--practice', action='store_true', help='the practice build (goal 3,2)')
-    p.add_argument('--flash', default=os.path.join(os.path.dirname(os.path.abspath(__file__)), 'build', 'flash.bin'),
+    p.add_argument('--flash', default=os.path.join(paths.SIM_BUILD, 'flash.bin'),
                    help='the robot flash (saved map) between runs')
     p.add_argument('--erase-flash', action='store_true', help='start with blank flash (no saved map)')
     p.add_argument('--headless', action='store_true', help='no viewer')
@@ -303,8 +314,8 @@ def make_parser():
     p.add_argument('--telemetry', action='store_true', help='show the @ telemetry lines too')
     p.add_argument('--timestamps', action='store_true', help='simulated time before every line')
     p.add_argument('--log', help='append everything the firmware sends to this file')
-    p.add_argument('--port', default=os.path.join(os.path.dirname(os.path.abspath(__file__)), 'build', 'tty'),
-                   help='the serial port the monitor opens (a link to a pseudo-terminal; default sim/build/tty)')
+    p.add_argument('--port', default=paths.SIM_TTY,
+                   help=f'the serial port the monitor opens (a link to a pseudo-terminal; default {paths.SIM_TTY})')
     p.add_argument('--no-pty', action='store_true', help='no serial port for the monitor')
     p.add_argument('--poses', action='store_true', help='print the true pose at every firmware pose report')
     p.add_argument('--follow', action='store_true', help='the viewer camera follows the robot')
@@ -323,6 +334,7 @@ def open_port(s, path):
     tty.setraw(slave)
     os.set_blocking(master, False)
     s.pty_fd = master
+    os.makedirs(os.path.dirname(path), exist_ok=True)
     try:
         os.remove(path)
     except OSError:
@@ -343,7 +355,7 @@ def main():
         link = args.port
         open_port(s, link)
         print(f'## the robot\'s Bluetooth port: {os.path.relpath(link)}  '
-              f'(python3 software/robot_monitor.py --port {os.path.relpath(link)})', flush=True)
+              f'(ratatron monitor --port {os.path.relpath(link)})', flush=True)
     for c in args.cmd:
         s.inbox.put(c)
     if not args.headless or not args.cmd:

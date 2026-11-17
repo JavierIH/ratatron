@@ -2,7 +2,7 @@
 """Every curve of a speed run measured against the cell geometry: lateral offset and heading error where the curve
 should begin (85.5 mm before the corner cell's centre) and where it should end (85.5 mm after), and the speed.
 
-    sim/.venv/bin/python sim/tools/curves.py MAZE FLASH RACE [--lib LIB] [--csv OUT]
+    ratatron sim curves MAZE FLASH RACE [--lib LIB] [--csv OUT]
 
 FLASH: a flash image with the maze's map (a search's); RACE: the race menu entry (4, 5, 6).
 The route is taken from the firmware's own line; only the run to the goal is measured.
@@ -16,10 +16,9 @@ import shutil
 import sys
 import tempfile
 
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from ratsim.firmware import build  # noqa: E402
-from ratsim.maze import Maze  # noqa: E402
-from ratsim.robot import Robot  # noqa: E402
+from .firmware import build
+from .maze import Maze
+from .robot import Robot
 
 CELL, LEG = 180.0, 85.5         # the curve's legs along each axis (CURVE_RADIUS_MM 70 + ramps, robot_config.h)
 D = [(0, 1), (1, 0), (0, -1), (-1, 0)]  # N E S W
@@ -80,7 +79,7 @@ def main():
     p.add_argument('maze')
     p.add_argument('flash')
     p.add_argument('race')
-    p.add_argument('--lib', help='firmware library (default: sim/fw, built if needed)')
+    p.add_argument('--lib', help='firmware library (default: the simulator one, built if needed)')
     p.add_argument('--csv')
     a = p.parse_args()
     tmp = tempfile.NamedTemporaryFile(suffix='.bin', delete=False).name

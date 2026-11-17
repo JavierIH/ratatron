@@ -1,6 +1,6 @@
 """Exports the robot's parts from mechanics/freecad/rat.fcstd to sim/assets/*.stl (assembly frame, mm).
 
-    ~/programs/FreeCAD_*.AppImage freecadcmd sim/tools/export_cad.py
+    ~/programs/FreeCAD_*.AppImage freecadcmd software/ratatron/sim/export_cad.py
 
 The printed parts (body, chassis, battery_cover, motor_support) are copied from mechanics/stl as they are.
 The CAD holds several design iterations: these are the objects of the current robot.
@@ -13,8 +13,8 @@ import Mesh
 import MeshPart
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-ROOT = os.path.dirname(os.path.dirname(HERE))
-OUT = os.path.join(ROOT, 'sim', 'assets')
+ROOT = os.path.dirname(os.path.dirname(os.path.dirname(HERE)))     # software/ratatron/sim -> the repo
+OUT = os.path.join(HERE, 'assets')
 PARTS = {
     'motor_l': ['Clone'], 'motor_r': ['Clone001'],
     'rim_l': ['Clone006'], 'tire_l': ['Clone007'], 'rim_r': ['Clone008'], 'tire_r': ['Clone009'],

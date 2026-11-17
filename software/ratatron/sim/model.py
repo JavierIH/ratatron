@@ -5,7 +5,7 @@ MM = 0.001
 WALL_GROUP = 1          # geom group of the walls and posts: the only thing the IR rays see
 ROBOT_GROUP = 2
 
-# Visual meshes exported from mechanics/freecad/rat.fcstd (sim/tools/export_cad.py), in the assembly frame.
+# Visual meshes exported from mechanics/freecad/rat.fcstd (sim/export_cad.py), in the assembly frame.
 BODY_MESHES = [         # name, rgba
     ('body', '1 0.85 0.1 1'), ('battery_cover', '1 0.85 0.1 1'), ('chassis', '0.16 0.16 0.16 1'),
     ('motor_support', '0.8 0.8 0.8 1'), ('motor_l', '0.73 0.6 0.3 1'), ('motor_r', '0.73 0.6 0.3 1'),

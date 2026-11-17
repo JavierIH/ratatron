@@ -145,6 +145,6 @@
 #define PARAM_KP                8.0f    // deg/s of turn per mm off-centre (simulator, side IR 5-20 ms late)
 #define PARAM_KD                0.6f    // deg of turn per mm the lateral error changes
 #define PARAM_LOG_LEVEL         2
-#define PARAM_TELEMETRY         1       // '@' lines for software/robot_monitor.py
+#define PARAM_TELEMETRY         1       // '@' lines for software/ratatron/monitor/monitor.py
 
 #endif // ROBOT_CONFIG_H

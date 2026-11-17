@@ -1,10 +1,14 @@
 #!/usr/bin/env python3
 """A video of the simulator and the robot monitor working together, with no screen: the 3D view on the left, the
-monitor (software/robot_monitor.py, in a pseudo-terminal, read back by a terminal emulator) on the right. The
+monitor (software/ratatron/monitor/monitor.py, in a pseudo-terminal, read back by a terminal emulator) on the right. The
 commands are typed into the monitor's console: MODE 1, START (the search), then MODE 2 6, START (race 2.6).
 
-    sim/.venv/bin/python sim/tools/demo_monitor.py demo.mp4      (needs pyte, pillow, ffmpeg)
+    ratatron sim demo-monitor demo.mp4      (needs pyte, pillow, ffmpeg)
 """
+import sys as _sys  # USAGE_GUARD
+if len(_sys.argv) < 1 or any(a in ('-h', '--help') for a in _sys.argv[1:]):
+    print(__doc__.strip())
+    raise SystemExit(0)
 import fcntl
 import os
 import pty
@@ -18,10 +22,8 @@ import mujoco
 import pyte
 from PIL import Image, ImageDraw, ImageFont
 
-SIM = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-ROOT = os.path.dirname(SIM)
-sys.path.insert(0, SIM)
-import run  # noqa: E402
+from .. import paths
+from . import run
 
 COLS, ROWS, CW, CH = 150, 48, 8, 15         # the monitor's terminal and its character cell in pixels
 VIEW = ROWS * CH                            # the 3D view, square
@@ -93,7 +95,7 @@ class Terminal:
 
 
 def main():
-    out = sys.argv[1] if len(sys.argv) > 1 else os.path.join(SIM, 'build', 'demo_monitor.mp4')
+    out = sys.argv[1] if len(sys.argv) > 1 else os.path.join(paths.SIM_BUILD, 'demo_monitor.mp4')
     args = run.make_parser().parse_args(['--headless', '--erase-flash'])
     s = run.Session(args)
     run.open_port(s, args.port)
@@ -101,9 +103,9 @@ def main():
 
     pid, fd = pty.fork()
     if pid == 0:
-        os.chdir(ROOT)
+        os.chdir(paths.REPO)
         os.environ.update(TERM='xterm-256color', COLORTERM='truecolor')
-        os.execvp('python3', ['python3', 'software/robot_monitor.py', '--port', os.path.relpath(args.port, ROOT),
+        os.execvp(sys.executable, [sys.executable, '-m', 'ratatron', 'monitor', '--port', args.port,
                                          '--no-record', '--full'])
     fcntl.ioctl(fd, termios.TIOCSWINSZ, struct.pack('HHHH', ROWS, COLS, 0, 0))
     os.set_blocking(fd, False)

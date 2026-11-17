@@ -3,7 +3,11 @@ ELF's maze_plan_to/from on an emulated Cortex-M3 (unicorn) and counts
 instructions, memory accesses and taken branches per planner pop (the cycles
 are a model: check it against the robot's "decisions on the way" line).
 Needs: pip install unicorn pyelftools. Maze files: github.com/micromouseonline/mazefiles.
-usage: plan_cycles.py .pio/build/competition/firmware.elf [mazefile]"""
+usage: ratatron cycles firmware/.pio/build/competition/firmware.elf [mazefile]"""
+import sys as _sys  # USAGE_GUARD
+if len(_sys.argv) < 2 or any(a in ('-h', '--help') for a in _sys.argv[1:]):
+    print(__doc__.strip())
+    raise SystemExit(0)
 import sys
 from elftools.elf.elffile import ELFFile
 from unicorn import Uc, UC_ARCH_ARM, UC_MODE_THUMB, UC_MODE_MCLASS, UC_HOOK_CODE, UC_HOOK_MEM_READ, UC_HOOK_MEM_WRITE
