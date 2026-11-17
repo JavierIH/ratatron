@@ -70,6 +70,14 @@ commit when done. Details go in the docs it points to, not here.
   (the planner still prices chains at 480). IR in curves
   (`curve_ir_info.py`): ideal sensors fix the position to ~1 mm per curve;
   next, CAL RUN curves on the robot to see if the real Sharp agrees.
+  Branch `sim-curve-fixes` now limits only the chained curves (each at
+  its own speed): 2.4 fails 7.5 %, 2.6 10.1 %, 2.6 median +0.5 s (all
+  curves at 400: 7.4 %, +1.25 s); the planner keeps its costs (--costs:
+  no pair better by more than 0.3 %).
+- Branch `ram-savings` (11-17): 1.1 KB of RAM freed (planner queue 512
+  with an exact overflow, IR trail 32 ms, centring average 16):
+  competition 47.2 %, dev 78.9 %. Host tests (also with a 16-state
+  queue, in CI) and the simulator pass; to merge after a robot check.
   Then the robot (mass, centre of mass, skid gap) before trusting any of it.
 
 ## Closed
