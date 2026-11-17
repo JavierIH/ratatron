@@ -212,11 +212,12 @@ class Robot:
         return q[0] / MM, q[1] / MM, yaw
 
     def crashed(self):
-        """A contact between the hull and a wall."""
+        """The wall or post the hull touches (its geom name), else None."""
         m, d = self.model, self.data
         hull = m.geom('hull').id
         for i in range(d.ncon):
             c = d.contact[i]
-            if hull in (c.geom1, c.geom2) and m.geom_group[c.geom2 if c.geom1 == hull else c.geom1] == WALL_GROUP:
-                return True
-        return False
+            other = c.geom2 if c.geom1 == hull else c.geom1
+            if hull in (c.geom1, c.geom2) and m.geom_group[other] == WALL_GROUP:
+                return m.geom(other).name or 'wall'
+        return None
