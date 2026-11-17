@@ -15,6 +15,8 @@ typedef enum { REPLAN_OK, REPLAN_UNREACHABLE } replan_t;
 static const plan_costs_t SEARCH_COSTS = {SEARCH_COST_CELL, SEARCH_COST_TURN};
 static const plan_costs_t FAST_COSTS = {FAST_COST_CELL, FAST_COST_TURN};
 static const char HEADING_CHAR[4] = {'N', 'E', 'S', 'W'};
+#define EV_SURE_WALL 2      // evidence from which a wall is surely there (seen twice, or the border)...
+#define EV_SURE_OPEN 2      // ...and surely open (the planner's verified passage)
 static const char *const PHASE_TAG[3] = {"GOAL", "OPTIM", "RETURN"};
 static const char *const ACTION_NAME[5] = {"-", "FORWARD", "LEFT", "RIGHT", "U-TURN"};
 
@@ -433,6 +435,19 @@ static const char *route_text(char *text){
     return text;
 }
 
+// A sighting against the map's verified state of that wall (a doubtful one never disagrees).
+static uint8_t wall_agrees(heading_t dir, uint8_t seen){
+    const int8_t e = maze_evidence(pose.x, pose.y, dir);
+    if(seen == SEEN_ABSENT) return e < EV_SURE_WALL;
+    if(seen == SEEN_PRESENT) return e > -EV_SURE_OPEN;
+    return 1;
+}
+
+static uint8_t walls_agree(const wall_sense_t *w){
+    return wall_agrees(pose.h, w->front) && wall_agrees(heading_left(pose.h), w->left)
+        && wall_agrees(heading_right(pose.h), w->right);
+}
+
 // A race's way: the verified route to `targets` in one go, replanned at every stop; curve_speed 0: turns in place.
 // Races only read the map: a wall where the verified route goes means the pose is wrong, and the run ends there.
 static run_result_t drive_to(const cellset_t *targets, int16_t speed, int16_t curve_speed, const char *tag,
@@ -467,7 +482,18 @@ static run_result_t drive_to(const cellset_t *targets, int16_t speed, int16_t cu
         if(r == MOVE_OK && route.cells) r = run_route(speed, curve_speed);
         if(r != MOVE_OK) return fail_move(r, tag);
     }
-    return RUN_OK;
+    // Arrived by the encoders: the walls here must be the map's, or the robot is not where it thinks (stuck against a
+    // wall the run never saw, its wheels turning). Look twice before saying so (one wrong sighting is not enough).
+    for(uint8_t look = 0;; look++){
+        wall_sense_t w;
+        const move_result_t r = motion_sense_walls(&w);
+        if(r != MOVE_OK) return fail_move(r, "sensing");
+        if(walls_agree(&w)) return RUN_OK;
+        if(look){
+            print("!! %s: the walls at (%u,%u) are not the map's\n", tag, pose.x, pose.y);
+            return fail_move(MOVE_LOST, tag);
+        }
+    }
 }
 
 run_result_t search_fast_run(uint8_t curves){
