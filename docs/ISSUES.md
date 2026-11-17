@@ -74,6 +74,13 @@ commit when done. Details go in the docs it points to, not here.
   its own speed): 2.4 fails 7.5 %, 2.6 10.1 %, 2.6 median +0.5 s (all
   curves at 400: 7.4 %, +1.25 s); the planner keeps its costs (--costs:
   no pair better by more than 0.3 %).
+  The real CAL RUN recordings of 09-26 (`sim/tools/real_ir_check.py`,
+  layouts C and E): readings off the model by 5-15 mm (MAD), biases up
+  to 45 mm, but the trajectory is dead reckoning and the layout guessed
+  by the time: not conclusive. Next at the robot (~10 min): in a corner
+  cell, the robot placed by hand at 0, 15, 30, 45, 60, 75 and 90 deg
+  about the cell centre, `CAL NOISE` at each: the side and front
+  readings against the angle with known geometry.
 - Branch `ram-savings` (11-17): 1.1 KB of RAM freed (planner queue 512
   with an exact overflow, IR trail 32 ms, centring average 16):
   competition 47.2 %, dev 78.9 %. Host tests (also with a 16-state
