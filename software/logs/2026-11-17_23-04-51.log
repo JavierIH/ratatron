@@ -1,0 +1,282 @@
+0.000	!	recording to software/logs/2026-11-17_23-04-51.log; tools attach at 127.0.0.1:7770
+1.375	!	connected to HC-05 20:13:09:11:04:32
+3.971	!	tool attached (1 attached)
+3.971	>	STATUS
+4.062	<	mode 1 SEARCH | stopped | robot (0,0)N away from the start
+4.168	<	SPD 600 FAST 900 CURVE 400 ACCEL 3000 TURN 500 TACCEL 5000 TURNTICKS 403 KP 8.00 KD 0.60 LOG 2
+4.272	<	stack: 3156 bytes never used | SysTick worst 328 us | reset: power-on
+4.326	<	RCC_CR=030b4d80 CFGR=001d840a | FLASH_SR=00 CR=0080 ACR=32 OBR=03fffffc WRPR=ffffffff
+4.373	<	chip CPUID=411fc231 IDCODE=00000000 64 KB
+4.478	<	flash: 5 slots | write 1st 0 us, worst 0 us, 0 ms | erase 22 ms | HSI 0
+4.515	<	goal (3,2)-(3,2) | 10 cells visited | fast path cost 24
+7.974	!	tool left (0 attached)
+79.978	!	tool attached (1 attached)
+79.978	!	tool left (0 attached)
+79.986	!	tool attached (1 attached)
+79.986	>	SYNC
+80.096	<	@G3232
+80.098	<	@M1
+80.098	<	@AI
+80.098	<	@P00N
+80.098	<	@Y2
+80.119	<	@R0N7VN000000000004
+80.151	<	@R1NVLN000000000004
+80.157	<	@R2TLCL000000000004
+97.092	!	tool attached (2 attached)
+97.093	>	MAP
+97.225	<	+---+---+...+---+
+97.250	<	| *   * | ?   G |
+97.263	<	+   +   +---+   +
+97.288	<	| * | *   * | * |
+97.328	<	+   +   +   +   +
+97.333	<	| ^ | ? | *   * |
+97.338	<	+---+---+---+---+
+97.417	<	S start G goal * fast path ? unvisited ^>v< robot  ...: doubtful wall
+101.096	!	tool left (1 attached)
+177.844	>	start
+178.025	<	START refused: the robot is not at the start. Place it facing north and send HOME
+183.700	>	home
+183.750	<	@P00N
+183.784	<	robot at the start facing north: ready
+185.678	>	start
+185.738	<	START mode 1 SEARCH
+185.793	<	Mode 1 SEARCH: starts in 5000 ms (START or STOP cancels)
+185.807	<	@G3232
+185.807	<	@M1
+185.813	<	@AC
+185.813	<	@P00N
+185.827	<	@Y2
+185.854	<	@R0N7VN000000000004
+185.872	<	@R1NVLN000000000004
+185.891	<	@R2TLCL000000000004
+190.740	<	@AG
+190.741	<	== SEARCH ==
+190.773	<	@C00No###
+190.777	<	@R0N7VN000000000004
+190.824	<	GOAL (0,0)N F0 L1 R1 cost=24 -> FORWARD
+191.148	<	@C01No#o#
+191.154	<	@P01N
+191.169	<	@R1NVLN000000000004
+191.218	<	GOAL (0,1)N F0 L1 R1 cost=22 -> FORWARD
+191.601	<	@C02N#oo#
+191.604	<	@P02N
+191.611	<	@R2TLCL000000000004
+191.623	<	GOAL (0,2)N F1 L1 R0 cost=20 -> RIGHT
+192.015	<	explore 2: end=IR dist=357.90mm target=358.60mm vmax=450mm/s IR(FL=85 FR=99 SL=86 SR=154) sides=10 t=1128ms err=1.22mm/1.51deg
+192.017	<	@P02N
+192.032	<	@C02N#oo#
+192.055	<	@R0N7VN000000000004
+192.109	<	GOAL (0,2)N F1 L? R0 cost=20 -> RIGHT
+192.312	<	turn right: 89.22deg of 90 end=OK TURNTICKS=403 t=295ms err=0.27mm/1.03deg
+192.312	<	@P02E
+192.312	<	@C02E#oo#
+192.371	<	@R1NVLN000000000004
+192.374	<	GOAL (0,2)E F0 L? R? cost=19 -> FORWARD
+192.642	<	@C12E##oo
+192.655	<	@P12E
+192.676	<	@R2TLCL000000000004
+192.713	<	GOAL (1,2)E F1 L1 R0 cost=17 -> RIGHT
+193.158	<	explore 1: end=IR dist=176.91mm target=177.67mm vmax=450mm/s IR(FL=85 FR=95 SL=82 SR=182) sides=10 t=720ms err=1.27mm/3.62deg
+193.159	<	@P12E
+193.303	<	squared: skew=5mm turn=4.28deg -> 0mm t=258ms err=0.17mm/1.04deg
+193.557	<	front aligned: err=-4.25mm t=274ms err=0.72mm/0.12deg
+193.579	<	@C12E##oo
+193.597	<	@R0N7VN000000000004
+193.638	<	GOAL (1,2)E F1 L? R0 cost=17 -> RIGHT
+193.901	<	turn right: 89.55deg of 90 end=OK TURNTICKS=403 t=281ms err=0.30mm/0.60deg
+193.901	<	@P12S
+193.915	<	@C12S##oo
+193.936	<	@R1NVLN000000000004
+193.977	<	GOAL (1,2)S F0 L? R0 cost=16 -> FORWARD
+194.257	<	@C11Sooo#
+194.259	<	@P11S
+194.276	<	@R2TLCL000000000004
+194.326	<	GOAL (1,1)S F0 L0 R1 cost=14 -> LEFT
+194.636	<	explore 1: end=ENC dist=179.51mm target=180.00mm vmax=450mm/s IR(FL=204 FR=250 SL=211 SR=76) sides=01 t=638ms err=1.22mm/2.01deg
+194.636	<	@P11S
+194.642	<	@C11Sooo#
+194.673	<	@R0N7VN000000000004
+194.733	<	GOAL (1,1)S F0 L0 R? cost=14 -> LEFT
+194.950	<	turn left: -89.33deg of -90 end=OK TURNTICKS=403 t=328ms err=0.47mm/0.89deg
+194.950	<	@P11E
+194.952	<	@C11Eooo#
+194.975	<	@R1NVLN000000000004
+195.022	<	GOAL (1,1)E F0 L0 R? cost=13 -> FORWARD
+195.277	<	@C21E##oo
+195.293	<	@P21E
+195.310	<	@R2TLCL000000000004
+195.360	<	GOAL (2,1)E F1 L1 R0 cost=11 -> RIGHT
+195.612	<	explore 1: end=IR dist=173.04mm target=173.46mm vmax=450mm/s IR(FL=83 FR=99 SL=89 SR=179) sides=10 t=588ms err=1.25mm/2.51deg
+195.647	<	@P21E
+195.647	<	@C21E##oo
+195.656	<	@R0N7VN000000000004
+195.703	<	GOAL (2,1)E F1 L? R0 cost=11 -> RIGHT
+195.886	<	turn right: 89.33deg of 90 end=OK TURNTICKS=403 t=285ms err=0.22mm/0.67deg
+195.886	<	@P21S
+195.901	<	@C21S##oo
+195.929	<	@R1NVLN000000000004
+195.968	<	GOAL (2,1)S F0 L? R0 cost=10 -> FORWARD
+196.254	<	@C20Soo##
+196.254	<	@P20S
+196.258	<	@R2TLCL000000000004
+196.321	<	GOAL (2,0)S F1 L0 R1 cost=8 -> LEFT
+196.578	<	explore 1: end=IR dist=177.96mm target=178.45mm vmax=450mm/s IR(FL=85 FR=99 SL=243 SR=78) sides=01 t=606ms err=1.27mm/3.01deg
+196.587	<	@P20S
+196.601	<	@C20Soo##
+196.639	<	@R0N7VN000000000004
+196.655	<	GOAL (2,0)S F1 L0 R? cost=8 -> LEFT
+196.910	<	turn left: -89.22deg of -90 end=OK TURNTICKS=403 t=339ms err=0.32mm/1.01deg
+196.910	<	@P20E
+196.918	<	@C20Eoo##
+196.951	<	@R1NVLN000000000004
+196.987	<	GOAL (2,0)E F0 L0 R? cost=7 -> FORWARD
+197.272	<	@C30Eo##o
+197.276	<	@P30E
+197.280	<	@R2TLCL000000000004
+197.316	<	GOAL (3,0)E F1 L0 R1 cost=5 -> LEFT
+197.708	<	explore 1: end=IR dist=172.82mm target=173.46mm vmax=450mm/s IR(FL=82 FR=101 SL=171 SR=74) sides=01 t=717ms err=1.24mm/1.28deg
+197.723	<	@P30E
+197.909	<	squared: skew=-4mm turn=-3.63deg -> 3mm t=253ms err=0.11mm/0.95deg
+197.921	<	@C30Eo##o
+197.940	<	@R0N7VN000000000004
+197.975	<	GOAL (3,0)E F1 L0 R? cost=5 -> LEFT
+198.230	<	turn left: -89.22deg of -90 end=OK TURNTICKS=403 t=280ms err=0.48mm/0.81deg
+198.230	<	@P30N
+198.238	<	@C30No##o
+198.297	<	@R1NVLN000000000004
+198.312	<	GOAL (3,0)N F0 L0 R? cost=4 -> FORWARD
+198.595	<	@C31No#o#
+198.597	<	@P31N
+198.607	<	@R2TLCL000000000004
+198.655	<	GOAL (3,1)N F0 L1 R1 cost=2 -> FORWARD
+198.956	<	@C32N##oo
+198.971	<	@P32N
+198.992	<	@R0N7VN000000000004
+199.435	<	explore 2: end=IR dist=352.65mm target=353.59mm vmax=450mm/s IR(FL=82 FR=97 SL=219 SR=78) sides=01 t=1108ms err=1.32mm/2.07deg
+199.438	<	@P32N
+199.631	<	front aligned: err=-4.27mm t=274ms err=0.63mm/0.33deg
+199.641	<	@C32N##oo
+199.660	<	@R1NVLN000000000004
+199.696	<	Goal reached at (3,2) after 15 actions
+199.737	<	Map saved (10 cells visited)
+200.530	<	@AO
+200.570	<	Optimal fast path verified: returning to the start
+200.580	<	@AH
+200.644	<	RETURN (3,2)N F1 L0 R? cost=26 -> U-TURN
+201.098	<	turn right: 179.22deg of 180 end=OK TURNTICKS=403 t=487ms err=0.27mm/1.01deg
+201.098	<	@P32S
+201.121	<	@C32S##oo
+201.159	<	@R2TLCL000000000004
+201.183	<	RETURN (3,2)S F0 L? R? cost=24 -> FORWARD
+201.438	<	@C31So#o#
+201.452	<	@P31S
+201.466	<	@R0N7VN000000000004
+201.517	<	RETURN (3,1)S F0 L1 R1 cost=22 -> FORWARD
+201.823	<	@C30So##o
+201.857	<	@P30S
+201.864	<	@R1NVLN000000000004
+201.931	<	RETURN (3,0)S F1 L1 R0 cost=20 -> RIGHT
+202.343	<	explore 2: end=IR dist=352.99mm target=353.61mm vmax=450mm/s IR(FL=85 FR=99 SL=87 SR=164) sides=10 t=1116ms err=1.23mm/3.82deg
+202.347	<	@P30S
+202.351	<	@C30So##o
+202.356	<	@R2TLCL000000000004
+202.390	<	RETURN (3,0)S F1 L? R0 cost=20 -> RIGHT
+202.569	<	turn right: 89.44deg of 90 end=OK TURNTICKS=403 t=280ms err=0.13mm/0.73deg
+202.569	<	@P30W
+202.580	<	@C30Wo##o
+202.610	<	@R0N7VN000000000004
+202.693	<	RETURN (3,0)W F0 L? R0 cost=19 -> FORWARD
+202.906	<	@C20Woo##
+202.915	<	@P20W
+202.948	<	@R1NVLN000000000004
+202.988	<	RETURN (2,0)W F1 L1 R0 cost=17 -> RIGHT
+203.208	<	explore 1: end=IR dist=175.86mm target=176.35mm vmax=450mm/s IR(FL=85 FR=97 SL=86 SR=182) sides=10 t=559ms err=1.23mm/2.16deg
+203.225	<	@P20W
+203.234	<	@C20Woo##
+203.253	<	@R2TLCL000000000004
+203.302	<	RETURN (2,0)W F1 L? R0 cost=17 -> RIGHT
+203.470	<	turn right: 89.33deg of 90 end=OK TURNTICKS=403 t=280ms err=0.74mm/0.76deg
+203.484	<	@P20N
+203.489	<	@C20Noo##
+203.529	<	@R0N7VN000000000004
+203.583	<	RETURN (2,0)N F0 L? R0 cost=16 -> FORWARD
+203.827	<	@C21N##oo
+203.827	<	@P21N
+203.845	<	@R1NVLN000000000004
+203.884	<	RETURN (2,1)N F1 L0 R1 cost=14 -> LEFT
+204.292	<	explore 1: end=IR dist=175.74mm target=176.30mm vmax=450mm/s IR(FL=83 FR=97 SL=219 SR=78) sides=01 t=718ms err=1.22mm/2.07deg
+204.292	<	@P21N
+204.349	<	front aligned: err=-3.65mm t=92ms err=0.56mm/0.12deg
+204.360	<	@C21N##oo
+204.384	<	@R2TLCL000000000004
+204.425	<	RETURN (2,1)N F1 L0 R? cost=14 -> LEFT
+204.702	<	turn left: -89.22deg of -90 end=OK TURNTICKS=403 t=286ms err=0.59mm/0.83deg
+204.702	<	@P21W
+204.713	<	@C21W##oo
+204.716	<	@R0N7VN000000000004
+204.745	<	RETURN (2,1)W F0 L0 R? cost=13 -> FORWARD
+204.980	<	@C11Wooo#
+204.995	<	@P11W
+205.016	<	@R1NVLN000000000004
+205.059	<	RETURN (1,1)W F1 L0 R0 cost=11 -> RIGHT
+205.453	<	explore 1: end=IR dist=174.47mm target=175.13mm vmax=450mm/s IR(FL=83 FR=99 SL=184 SR=179) sides=00 t=720ms err=1.17mm/1.68deg
+205.470	<	@P11W
+205.470	<	@C11Wooo#
+205.498	<	@R2TLCL000000000004
+205.544	<	RETURN (1,1)W F1 L0 R0 cost=11 -> RIGHT
+205.728	<	turn right: 89.33deg of 90 end=OK TURNTICKS=403 t=280ms err=0.35mm/0.72deg
+205.728	<	@P11N
+205.734	<	@C11Nooo#
+205.781	<	@R0N7VN000000000004
+205.803	<	RETURN (1,1)N F0 L? R0 cost=10 -> FORWARD
+206.055	<	@C12N##oo
+206.112	<	@P12N
+206.114	<	@R1NVLN000000000004
+206.134	<	RETURN (1,2)N F1 L0 R1 cost=8 -> LEFT
+206.524	<	explore 1: end=IR dist=172.65mm target=173.33mm vmax=450mm/s IR(FL=85 FR=99 SL=234 SR=78) sides=01 t=718ms err=1.19mm/3.38deg
+206.539	<	@P12N
+206.551	<	@C12N##oo
+206.570	<	@R2TLCL000000000004
+206.618	<	RETURN (1,2)N F1 L0 R? cost=8 -> LEFT
+206.795	<	turn left: -89.22deg of -90 end=OK TURNTICKS=403 t=280ms err=0.59mm/0.80deg
+206.795	<	@P12W
+206.815	<	@C12W##oo
+206.838	<	@R0N7VN000000000004
+206.902	<	RETURN (1,2)W F0 L0 R? cost=7 -> FORWARD
+207.128	<	@C02W#oo#
+207.135	<	@P02W
+207.156	<	@R1NVLN000000000004
+207.209	<	RETURN (0,2)W F1 L0 R1 cost=5 -> LEFT
+207.594	<	explore 1: end=IR dist=172.81mm target=173.50mm vmax=450mm/s IR(FL=82 FR=99 SL=167 SR=76) sides=01 t=713ms err=1.24mm/2.11deg
+207.609	<	@P02W
+207.658	<	front aligned: err=-3.40mm t=67ms err=0.48mm/0.33deg
+207.669	<	@C02W#oo#
+207.689	<	@R2TLCL000000000004
+207.740	<	RETURN (0,2)W F1 L0 R? cost=5 -> LEFT
+207.949	<	turn left: -89.44deg of -90 end=OK TURNTICKS=403 t=283ms err=0.63mm/0.87deg
+207.949	<	@P02S
+207.949	<	@C02S#oo#
+207.980	<	@R0N7VN000000000004
+208.033	<	RETURN (0,2)S F0 L0 R? cost=4 -> FORWARD
+208.285	<	@C01So#o#
+208.285	<	@P01S
+208.308	<	@R1NVLN000000000004
+208.353	<	RETURN (0,1)S F0 L1 R1 cost=2 -> FORWARD
+208.653	<	@C00So###
+208.671	<	@P00S
+208.689	<	@R2TLCL000000000004
+209.139	<	explore 2: end=IR dist=353.76mm target=354.36mm vmax=450mm/s IR(FL=82 FR=96 SL=92 SR=76) sides=11 t=1114ms err=1.11mm/1.93deg
+209.139	<	@P00S
+209.344	<	front aligned: err=-4.23mm t=274ms err=0.64mm/0.34deg
+209.345	<	@C00So###
+209.369	<	@R0N7VN000000000004
+209.853	<	turn right: 179.22deg of 180 end=OK TURNTICKS=403 t=460ms err=0.35mm/0.78deg
+209.865	<	@P00N
+209.891	<	At the start after 31 actions
+209.933	<	Fast path verified: cost 24
+209.949	<	Map already saved (unchanged)
+210.733	<	decisions on the way: 18, worst 4638 us (1024 pops), late 0
+210.779	<	End: OK | robot at the start, ready
+210.779	<	@AI
+210.793	<	@P00N
+359.070	!	tool left (0 attached)
