@@ -5,6 +5,9 @@
   and next step. Work on one; before stopping, close it or update its entry
   (result and next step in a line or two), so the next session resumes from
   the file alone. One session per issue.
+- Keep `TODO.md` (repo root, the user's private checklist: bullets only,
+  in Spanish, excluded from git) in step with `docs/ISSUES.md`: tick or
+  add its lines whenever a task is done or appears.
 - Details live in `docs/` (index: `docs/README.md`): `design.md` (how and
   why: motion, sensing, centring, curves, search legs, health, telemetry
   format), `measurements.md` (the numbers behind `robot_config.h`),
