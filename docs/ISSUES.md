@@ -9,7 +9,8 @@ commit when done. Details go in the docs it points to, not here.
 At the robot (`ratatron flash practice`; everything below is in `develop`):
 - 11-17 done (`docs/testing.md`, `docs/faults/race-slip-2026-11-17.md`):
   the firmware of 11-17 validated on E (search, 2.4-2.6, arrival check,
-  RAM), the IR at an angle, `connect` + `send`. Found: at 900 the run-up
+  RAM), the IR at an angle, `connect` + `send` + `monitor`, `CAL LAPS`
+  on F (rolling: ~5 mm in 34 m; the error is slips). Found: at 900 the run-up
   slipped at `ACCEL` 3000 (5-6.5 deg); the races now at most 2000
   (`fba2b1f`). Next flash: check it (2.6 on E, the first straight's
   heading ~0); the 2 deg curve clamp to review first in the simulator
@@ -19,10 +20,6 @@ At the robot (`ratatron flash practice`; everything below is in `develop`):
   mass along the robot (a knife-edge balance; its height if possible),
   the skids' gap to the floor (feeler gauge). Then check that race 2.6
   fails in the simulator as on the robot.
-- Long routes on the 4x3 (layout F, the ring): `CAL LAPS 20 300`, then
-  400 and 480 (34 m, 80 curves in one move). The `dist=X/Y` of its
-  `route` line is the along-track error after it (simulator: 0.5 mm);
-  what the OSHWDEM race lost over 74 cells.
 - `ratatron connect` via rfcomm0 (11-17: the RFCOMM socket, `send` and
   `monitor` attached at once all work, the monitor's map right).
 

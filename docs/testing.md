@@ -39,6 +39,20 @@ Log `software/logs/2026-11-17_21-48-02.log`, recordings
    model's IR delay holds). Script: the session's scratchpad `irangle.py`
    (a sweep through `real_ir_check`'s `load`/`predict` at a fixed pose).
 
+7. Long routes on layout F (`CAL LAPS 20 V`, 202 cells and 80 curves in
+   one move, `ACCEL 2000` set by hand). The printed `dist=X/Y` is X
+   against the IR-aimed end Y, not the plan: the plan is `path.c`'s length
+   (300: 33874.6, 400: 34153.8, 480: 34434.6 mm). Where the wall turned
+   up against the plan: 300 +4.9 mm, 400 +14.7, 480 +5.6 (all `end=IR`,
+   worst heading tracking 9.5 / 14 / 7.7 deg). A first try at 480 ended
+   `SLIPPED` after 18 curves (19.9 deg, no touch); repeated, clean: a
+   one-off slip (a dusty floor), not the curve's limit. Rolling, the
+   encoders lose ~5 mm in 34 m; the along-track error of the races comes
+   from slips. The same reading on E's races (Y against the plan): 900/400
+   at `ACCEL` 3000 +23, +30, +30 (the `FRONT_LATE_MAX_MM` clamp: ~50 mm
+   overcounted in the run-up), at 2000 -10 and -1; the returns at 600/300
+   -19 to +12.
+
 ## Robot session of 11-13 (results)
 
 Flashed `practice` 20:11 (the audit of 11-11, the wall-end hold,
