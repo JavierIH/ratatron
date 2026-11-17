@@ -31,7 +31,8 @@ ratatron connect --sim               # then ratatron monitor / ratatron send, as
   `MOTOR_TAU_S`), two physics steps of 0.5 ms.
 - IR (Sharp GP2Y0A51SK0F where the CAD puts them): three rays, a reading every 16 ms held, 0.8 mm noise, an
   offset per sensor so the firmware's reference readings hold centred in a cell.
-- Robot: CAD meshes (`export_cad.py`, FreeCAD headless); collisions: 2 mm tire bands at the track that gives a
+- Robot: CAD meshes (`export_cad.py`, FreeCAD headless: every part visible in
+  `mechanics/freecad/ratatron.fcstd`, one mesh per colour); collisions: 2 mm tire bands at the track that gives a
   90 deg turn its 403 ticks, a box hull, skids 0.5 mm off the floor.
 
 ## Calibrated, assumed, open

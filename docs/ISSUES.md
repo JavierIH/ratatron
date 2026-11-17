@@ -32,11 +32,10 @@ At the robot (`ratatron flash practice`; everything below is in `develop`):
 
 Without the robot:
 - The 3D viewer (`ratatron sim` with a screen) is untested.
-- Better 3D files of the robot from the user: the FreeCAD file holds
-  several design iterations (the parts were picked by hand,
-  `software/ratatron/sim/export_cad.py`), shows 4 LEDs of the board's 6
-  and no clear skid; with clean, current parts (and the real skids) the
-  simulator's geometry and collisions can be exact.
+- The robot's 3D model (11-17): `mechanics/freecad/ratatron.fcstd`, only the
+  final parts visible; `export_cad.py` exports what is visible in FreeCAD's
+  colours (N20s coloured as Pololu's: brass plates, steel gears). Next: the
+  collisions from the CAD's skids (y +26 and -23 mm, the sim has +18/-22).
 - The competition gives 7 minutes for the search and the races
   together (the user, 11-13): the OPTIM phase stays as it is.
 - Next by `docs/roadmap.md`: the large maze (issue 11, deferred until a

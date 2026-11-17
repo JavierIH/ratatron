@@ -1,20 +1,18 @@
 """The MuJoCo scene: a micromouse maze (black floor, white walls, red tops) and the robot built from the CAD."""
+import json
+import os
+
 from . import config as C
 
 MM = 0.001
 WALL_GROUP = 1          # geom group of the walls and posts: the only thing the IR rays see
 ROBOT_GROUP = 2
 
-# Visual meshes exported from mechanics/freecad/rat.fcstd (sim/export_cad.py), in the assembly frame.
-BODY_MESHES = [         # name, rgba
-    ('body', '1 0.85 0.1 1'), ('battery_cover', '1 0.85 0.1 1'), ('chassis', '0.16 0.16 0.16 1'),
-    ('motor_support', '0.8 0.8 0.8 1'), ('motor_l', '0.73 0.6 0.3 1'), ('motor_r', '0.73 0.6 0.3 1'),
-    ('pcb', '0.05 0.35 0.12 1'), ('buttons', '0.75 0.75 0.75 1'), ('bolts', '0.6 0.6 0.62 1'),
-    ('ir_fl', '0.08 0.08 0.08 1'), ('ir_fr', '0.08 0.08 0.08 1'),
-    ('ir_sl', '0.08 0.08 0.08 1'), ('ir_sr', '0.08 0.08 0.08 1'),
-]
-WHEEL_MESHES = [('rim', '0.13 0.13 0.13 1'), ('tire', '0.03 0.03 0.03 1')]
-LED_X_MM = [-17.0, -13.0, -9.0, 9.0, 13.0, 17.0]    # LEDs 1-3 left, 4-6 right (the CAD shows four, the board has six)
+# Visual meshes exported from mechanics/freecad/ratatron.fcstd (sim/export_cad.py), in the assembly frame:
+# one per colour and body (robot, wheel_l, wheel_r).
+with open(os.path.join(C.ASSETS, 'parts.json')) as _fp:
+    PARTS = json.load(_fp)
+LED_X_MM = [-18.5, -13.5, -8.5, 8.5, 13.5, 18.5]    # LEDs 1-3 left, 4-6 right (the CAD's)
 
 
 def _f(*v):
@@ -62,16 +60,17 @@ def maze_xml(maze):
 def robot_xml():
     z0 = -C.GROUND_Z_MM * MM        # the CAD frame's height above the floor
     r = C.TIRE_RADIUS_MM * MM     # contact: a 2 mm band of the tire at CONTACT_X_MM (the 13 mm cylinder touched on its edges)
-    meshes = ''.join(f'<geom class="visual" mesh="{name}" rgba="{rgba}"/>' for name, rgba in BODY_MESHES)
+    meshes = ''.join(f'<geom class="visual" mesh="{p["mesh"]}" rgba="{_f(*p["rgba"])}"/>'
+                     for p in PARTS if p['body'] == 'robot')
     leds = ''.join(f'<geom name="led{i + 1}" class="visual" type="box" pos="{_f(x * MM, -26.5 * MM, 18.5 * MM)}" '
                    f'size="{_f(1.5 * MM, 1.0 * MM, 1.0 * MM)}" rgba="0.25 0.05 0.05 1"/>' for i, x in enumerate(LED_X_MM))
-    sites = ''.join(f'<site name="ir_{name}" pos="{_f(*(v * MM for v in pos))}" size="0.0015" rgba="1 0 0 0.6"/>'
+    sites = ''.join(f'<site name="ir_{name}" pos="{_f(*(v * MM for v in pos))}" size="0.0015" group="4" rgba="1 0 0 0.6"/>'
                     for name, (_, _, pos, _) in C.IR_SENSORS.items())
     wheels = ''
     for side, sign in (('l', -1), ('r', 1)):
         cx = sign * C.CONTACT_X_MM * MM
-        vis = ''.join(f'<geom class="visual" mesh="{name}_{side}" pos="{_f(-cx, 0, -C.AXLE_Z_MM * MM)}" rgba="{rgba}"/>'
-                      for name, rgba in WHEEL_MESHES)
+        vis = ''.join(f'<geom class="visual" mesh="{p["mesh"]}" pos="{_f(-cx, 0, -C.AXLE_Z_MM * MM)}" rgba="{_f(*p["rgba"])}"/>'
+                      for p in PARTS if p['body'] == f'wheel_{side}')
         wheels += f'''
       <body name="wheel_{side}" pos="{_f(cx, 0, C.AXLE_Z_MM * MM)}">
         <joint name="wheel_{side}" type="hinge" axis="-1 0 0" armature="2e-6"/>
@@ -91,10 +90,8 @@ def robot_xml():
 
 
 def scene_xml(maze):
-    mesh_assets = ''.join(f'<mesh name="{name}" file="{name}.stl" scale="0.001 0.001 0.001"/>'
-                          for name, _ in BODY_MESHES)
-    mesh_assets += ''.join(f'<mesh name="{name}_{s}" file="{name}_{s}.stl" scale="0.001 0.001 0.001"/>'
-                           for name, _ in WHEEL_MESHES for s in 'lr')
+    mesh_assets = ''.join(f'<mesh name="{p["mesh"]}" file="{p["mesh"]}.stl" scale="0.001 0.001 0.001" inertia="shell"/>'
+                          for p in PARTS)
     centre = maze.size * C.CELL_MM * MM / 2
     return f'''<mujoco model="ratatron_maze">
   <compiler meshdir="{C.ASSETS}" angle="degree" inertiafromgeom="auto"/>
