@@ -175,7 +175,8 @@ class Session:
                 self.crashes += 1
                 if self.crashes == 1 or self.crashes % 500 == 0:
                     x, y, h = r.pose()
-                    print(f'## the robot touches a wall at x={x:.0f} y={y:.0f} mm, heading {h:.1f} deg', flush=True)
+                    print(f'## [{r.fw.time_ms() / 1000:8.3f}] the robot touches a wall at x={x:.0f} y={y:.0f} mm, heading {h:.1f} deg',
+                          flush=True)
             if self.args.until_idle and self.started:
                 busy = r.fw.lib.app_run_active()
                 if busy:
