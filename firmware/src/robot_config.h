@@ -99,6 +99,8 @@
 #define CURVE_SLIP_VREF_MM_S    480.0f
 #define CURVE_PRE_SLIP_MM       7.0f    // mm more `pre` at VREF, as v^2 - V0^2: the sideways slip (layout E)
 #define CURVE_PRE_V0_MM_S       300.0f  // ...from this speed up
+#define CURVE_CHAIN_MIN         3       // curves in consecutive cells (a staircase): their sideways slips add up, nothing centres...
+#define CURVE_CHAIN_SPEED       400.0f  // ...so at most this, mm/s (simulator: 480 crashed a 12-curve staircase, 400 kept 25 mm)
 #define CURVE_PWM_SHARE         0.9f    // PWM share the outer wheel may ask in a curve: caps it at ~480 mm/s
 
 // ---- Other moves ------------------------------------------------------------------

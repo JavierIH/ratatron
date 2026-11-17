@@ -1878,6 +1878,37 @@ static void test_curve_slip(void){
     CHECK(ok);
 }
 
+// Curves in consecutive cells (a chain of chain_min or more) at chain_v at most; a single curve at the route's speed.
+static void test_curve_chain(void){
+    static const int8_t turns[10] = {0, 1, -1, 1, 0, 0, 1, 0, 0, 0};
+    const run_path_t path = {turns, 10};
+    curve_t c = default_curve();
+    c.chain_min = 3;
+    c.chain_v = 400.0f;
+    path_run_t r;
+    profile_t fwd, rot;
+    CHECK(path_start(&r, &path, &c, CELL_MM, 900.0f, 480.0f, PARAM_ACCEL));
+    CHECK(r.next == 1 && fabsf(r.v_curve - 400.0f) < 0.01f);
+    float v_chain = 0.0f, v_single = 0.0f;
+    for(int i = 0; i < 20000 && !r.done; i++){
+        path_step(&r, &fwd, &rot, CONTROL_DT_S);
+        if(r.s > r.curve_start && r.s < r.curve_start + r.curve.length){
+            if(r.next <= 3 && r.v > v_chain) v_chain = r.v;
+            if(r.next == 6 && r.v > v_single) v_single = r.v;
+        }
+    }
+    CHECK(r.done);
+    CHECK(v_chain > 399.0f && v_chain < 401.0f);
+    CHECK(v_single > 479.0f && v_single < 481.0f);
+    // The length counts each curve's own `pre`: the run ends where planned.
+    CHECK(fabsf(r.s - r.length) < 0.01f);
+    // Two curves are not a chain.
+    static const int8_t pair[6] = {0, 1, -1, 0, 0, 0};
+    const run_path_t two = {pair, 6};
+    CHECK(path_start(&r, &two, &c, CELL_MM, 900.0f, 480.0f, PARAM_ACCEL));
+    CHECK(fabsf(r.v_curve - 480.0f) < 0.01f);
+}
+
 // `pre` grows with the curve speed above CURVE_PRE_V0 (curves slip outwards the faster).
 static void test_curve_pre_slip(void){
     static const int8_t layout_e[9] = {0, 1, 1, -1, 1, -1, -1, 0, 0};
@@ -2301,6 +2332,7 @@ int main(int argc, char **argv){
     test_path_governor();
     test_curve_slip();
     test_curve_pre_slip();
+    test_curve_chain();
     test_path_centring();
 
     printf("%d checks, %d failures\n", checks, failures);

@@ -25,6 +25,8 @@ typedef struct {
     float slip_k;       // deg added to `angle` per (mm/s)^2 of the path's curve speed (0 after curve_setup)
     float pre_k;        // mm added to `pre` per (mm/s)^2 of the path's curve speed above...
     float pre_v0;       // ...this, mm/s (0 after curve_setup)
+    uint8_t chain_min;  // curves in consecutive cells from which...
+    float chain_v;      // ...each of them is taken at most at this, mm/s (0 after curve_setup: no limit)
 } curve_t;
 
 // The curve from its shape; 0 if impossible or it does not fit its cell.
@@ -34,9 +36,11 @@ float curve_progress(const curve_t *c, float u);
 
 typedef struct {
     run_path_t path;
-    curve_t curve;
+    curve_t shape;          // the curve as given (slip terms included)
+    curve_t curve;          // the next (or current) curve as taken at its speed
     float cell_mm;
-    float v_straight, v_curve, accel;   // mm/s, mm/s, mm/s^2
+    float v_straight, v_curve, accel;   // mm/s, mm/s (the next or current curve's), mm/s^2
+    float v_route_curve;    // mm/s, the curves' speed outside chains
     float length;           // mm, start to end as planned
     float stop_at;          // mm, where the run ends: moves with a wall seen at the end, or earlier to stop short
     float s, v;             // reference: distance along the path, speed

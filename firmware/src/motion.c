@@ -375,6 +375,8 @@ static uint8_t curve_from_tuning(curve_t *c){
     c->slip_k = curve_slip / (CURVE_SLIP_VREF_MM_S * CURVE_SLIP_VREF_MM_S);
     c->pre_k = curve_pre_slip / (CURVE_SLIP_VREF_MM_S * CURVE_SLIP_VREF_MM_S - curve_pre_v0 * curve_pre_v0);
     c->pre_v0 = curve_pre_v0;
+    c->chain_min = CURVE_CHAIN_MIN;
+    c->chain_v = CURVE_CHAIN_SPEED;
     return 1;
 }
 

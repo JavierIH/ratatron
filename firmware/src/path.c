@@ -50,7 +50,8 @@ uint8_t curve_setup(curve_t *c, float radius, float ramp, float angle, float cel
     c->radius = radius;
     c->ramp = ramp;
     c->angle = angle;
-    c->slip_k = c->pre_k = c->pre_v0 = 0.0f;
+    c->slip_k = c->pre_k = c->pre_v0 = c->chain_v = 0.0f;
+    c->chain_min = 0;
     c->k = 1.0f / radius;
     c->k_ramp = c->k / ramp;
     // Each clothoid turns ramp / (2 radius): the arc makes up the rest.
@@ -80,6 +81,28 @@ static int8_t turn_at(const run_path_t *p, uint8_t i){
     return p->turn ? p->turn[i] : 0;
 }
 
+// The speed of the curve in cell i: the route's, or chain_v in a chain of chain_min curves or more in consecutive
+// cells (no straight between them to centre on: each curve's sideways slip adds up).
+static float curve_speed(const path_run_t *r, uint8_t i){
+    const run_path_t *p = &r->path;
+    if(!r->shape.chain_min || r->shape.chain_v <= 0.0f) return r->v_route_curve;
+    uint8_t a = i, b = i;
+    while(a > 0 && turn_at(p, (uint8_t)(a - 1u))) a--;
+    while(b + 1u < p->cells && turn_at(p, (uint8_t)(b + 1u))) b++;
+    const uint8_t chain = (uint8_t)(b - a + 1u);
+    return chain >= r->shape.chain_min ? fminf(r->v_route_curve, r->shape.chain_v) : r->v_route_curve;
+}
+
+// The curve as taken at speed v: faster curves turn less for the same encoder angle and slip outwards (a later
+// start makes up for it).
+static void set_curve(path_run_t *r, float v){
+    const curve_t *c = &r->shape;
+    r->v_curve = v;
+    r->curve.angle = c->angle + c->slip_k * v * v;
+    r->curve.pre = fmaxf(c->pre + c->pre_k * fmaxf(v * v - c->pre_v0 * c->pre_v0, 0.0f),
+                         fmaxf(-c->post, -0.25f * r->cell_mm));
+}
+
 // Scans from the straight's first cell for the next curve.
 static void find_next(path_run_t *r){
     const run_path_t *p = &r->path;
@@ -91,6 +114,7 @@ static void find_next(path_run_t *r){
     }
     r->next = i;
     r->dir = i < p->cells ? turn_at(p, i) : 0;
+    if(i < p->cells) set_curve(r, curve_speed(r, i));
     r->curve_start = i < p->cells ? edge + r->curve.pre : PATH_NONE;
 }
 
@@ -106,31 +130,22 @@ uint8_t path_start(path_run_t *r, const run_path_t *path, const curve_t *curve, 
     if(!path->cells || turn_at(path, (uint8_t)(path->cells - 1u)) != 0) return 0;
     // After the last curve the path ends at the next cell centre: the curve speed must leave room to brake.
     const float room = curve->post + 0.5f * cell_mm;
-    float vc = fminf(fminf(v_curve, v_straight), control_sqrt(2.0f * accel * room));
-    // PROTOTYPE C: 3 or more curves in consecutive cells (no straight to centre between them): at most 400.
-    uint8_t chain = 0, longest = 0;
-    for(uint8_t i = 0; i + 1u < path->cells; i++){
-        chain = turn_at(path, i) ? (uint8_t)(chain + 1u) : 0u;
-        if(chain > longest) longest = chain;
-    }
-    if(longest >= 3u) vc = fminf(vc, 400.0f);
-    // Faster curves turn less for the same encoder angle and slip outwards: a later start makes up for it.
-    const float pre = fmaxf(curve->pre + curve->pre_k * fmaxf(vc * vc - curve->pre_v0 * curve->pre_v0, 0.0f),
-                            fmaxf(-curve->post, -0.25f * cell_mm));
+    const float vc = fminf(fminf(v_curve, v_straight), control_sqrt(2.0f * accel * room));
+    r->path = *path;
+    r->shape = *curve;
+    r->curve = *curve;
+    r->cell_mm = cell_mm;
+    r->v_route_curve = vc;
     float length = cell_mm;     // half of the start cell and half of the last one
     for(uint8_t i = 0; i + 1u < path->cells; i++){
         const int8_t turn = turn_at(path, i);
         if(turn < -1 || turn > 1) return 0;
-        length += turn ? pre + curve->length + curve->post : cell_mm;
+        if(turn) set_curve(r, curve_speed(r, i));
+        length += turn ? r->curve.pre + curve->length + curve->post : cell_mm;
     }
-    r->path = *path;
-    r->curve = *curve;
-    r->cell_mm = cell_mm;
     r->accel = accel;
     r->v_straight = v_straight;
-    r->v_curve = vc;
-    r->curve.angle = curve->angle + curve->slip_k * vc * vc;
-    r->curve.pre = pre;
+    set_curve(r, vc);
     r->length = r->stop_at = length;
     r->s = r->v = 0.0f;
     r->heading = r->base = 0.0f;
