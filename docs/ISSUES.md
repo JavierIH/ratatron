@@ -35,7 +35,8 @@ Without the robot:
 - The robot's 3D model (11-17): `mechanics/freecad/ratatron.fcstd`, only the
   final parts visible; `export_cad.py` exports what is visible in FreeCAD's
   colours (N20s coloured as Pololu's: brass plates, steel gears); the
-  sim's skids are the CAD's (search and race 2.6 on oshwdem2026 unchanged).
+  sim's skids are the CAD's: race 2.6 on 58 real mazes, the same maps,
+  3 failed vs 4 with the old skids (the same 3), 5 wall touches vs 11, same times.
 - The competition gives 7 minutes for the search and the races
   together (the user, 11-13): the OPTIM phase stays as it is.
 - Next by `docs/roadmap.md`: the large maze (issue 11, deferred until a
