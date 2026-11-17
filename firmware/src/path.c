@@ -106,7 +106,14 @@ uint8_t path_start(path_run_t *r, const run_path_t *path, const curve_t *curve, 
     if(!path->cells || turn_at(path, (uint8_t)(path->cells - 1u)) != 0) return 0;
     // After the last curve the path ends at the next cell centre: the curve speed must leave room to brake.
     const float room = curve->post + 0.5f * cell_mm;
-    const float vc = fminf(fminf(v_curve, v_straight), control_sqrt(2.0f * accel * room));
+    float vc = fminf(fminf(v_curve, v_straight), control_sqrt(2.0f * accel * room));
+    // PROTOTYPE C: 3 or more curves in consecutive cells (no straight to centre between them): at most 400.
+    uint8_t chain = 0, longest = 0;
+    for(uint8_t i = 0; i + 1u < path->cells; i++){
+        chain = turn_at(path, i) ? (uint8_t)(chain + 1u) : 0u;
+        if(chain > longest) longest = chain;
+    }
+    if(longest >= 3u) vc = fminf(vc, 400.0f);
     // Faster curves turn less for the same encoder angle and slip outwards: a later start makes up for it.
     const float pre = fmaxf(curve->pre + curve->pre_k * fmaxf(vc * vc - curve->pre_v0 * curve->pre_v0, 0.0f),
                             fmaxf(-curve->post, -0.25f * cell_mm));
