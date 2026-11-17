@@ -30,4 +30,7 @@ void search_pose(uint8_t *x, uint8_t *y, heading_t *h);
 uint16_t search_fast_path_cost(void);   // verified start->goal cost, PLAN_INF if none
 void search_print_map(void);
 
+// The speed run's route buffer (PATH_MAX_CELLS turns), lent while no run is going on (CAL LAPS).
+int8_t *search_route_buffer(void);
+
 #endif // SEARCH_H

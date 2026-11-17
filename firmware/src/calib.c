@@ -10,10 +10,15 @@
 #include "motion.h"
 #include "motor.h"
 #include "params.h"
+#include "path.h"
+#include "search.h"
 #include "robot_config.h"
 #include "uart.h"
 
 #define CAL_CAPACITY    320     // 6.4 KB of RAM
+#define CAL_LAP_CELLS   10      // CAL LAPS: a lap of the 4x3 ring
+#define CAL_LAPS_MAX    25      // ...a path holds 255 cells
+_Static_assert(CAL_LAPS_MAX * CAL_LAP_CELLS + 2 <= PATH_MAX_CELLS, "CAL LAPS: the route buffer");
 #define CAL_MAX_PERIOD_MS 50    // coarsest resolution before a recording gives up
 #define CAL_COAST_MS    300     // keep recording after the motion ends
 #define CAL_IR_SPEED    100     // mm/s backing away from the wall
@@ -267,6 +272,24 @@ void calib_run(cal_test_t test, int32_t a, int32_t b){
             record_start(10);
             r = motion_drive_straight(-CAL_IR_SPEED, a);
             break;
+        case CAL_LAPS:{
+            // Clockwise round layout F's island from the start facing north (10 cells and 4 curves a lap), then up
+            // to (0,2): the north border ends the move, so its `dist` against the plan is the error after the laps.
+            static const int8_t LAP[CAL_LAP_CELLS] = {0, 1, 0, 0, 1, 0, 1, 0, 0, 1};
+            int8_t *turns = search_route_buffer();     // stopped: the speed run's buffer is free
+            uint8_t n = 0;
+            for(int32_t lap = 0; lap < a; lap++){
+                for(uint8_t i = 0; i < CAL_LAP_CELLS; i++) turns[n++] = LAP[i];
+            }
+            turns[n++] = 0;
+            turns[n++] = 0;
+            const run_path_t path = {turns, n};
+            uint8_t entered;
+            snprintf(description, sizeof(description), "laps %ld %ld", (long)a, (long)b);
+            record_start(2);
+            r = motion_run_path(&path, params.fast_speed, (int16_t)b, &entered);
+            break;
+        }
         case CAL_DUMP:
             dump();
             return;

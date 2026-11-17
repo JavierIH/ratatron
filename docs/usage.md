@@ -85,6 +85,7 @@ robot wait 2 s (START or STOP cancel).
 | `CAL CURVE [±1] [mm/s]` | a cell, a smooth curve, a cell | exit lateral and stop, `CURVE_ANGLE` |
 | `CAL STEP [pwm] [ms]` | free space ahead | motor model, braking |
 | `CAL IR [mm]` | against a wall ahead; `/note start <mm> mm` | the front IR curve |
+| `CAL LAPS [laps] [mm/s]` | layout F (the ring), at the start facing north | laps in one move (10 cells, 4 curves each, straights at `FAST`), ending against the north border: `dist` against the plan is the error after a long route (20 laps: 34 m, 80 curves) |
 | `CAL RUN` | before a run | records its next continuous move |
 | rounds of `CAL NOISE` + `CAL TURN 1` (x4) | in a cell closed on 3 sides, centred front to back; a round per position, moving the robot 10-15 mm sideways between rounds | slope and centre (`SIDE_CENTER_L/R_MM`) of the side IR |
 | `CAL DUMP` | — | sends the last recording again |

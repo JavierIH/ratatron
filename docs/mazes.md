@@ -130,7 +130,7 @@ Drawn from the robot's `MAP` after its search (31 actions, no "!!").
   No straight between the curves: nothing corrects the robot's position
   there, so each curve's error carries into the next (issue 1).
 
-## F: a ring round an island (2026-09-26 20:00, curve calibration)
+## F: a ring round an island (2026-09-26 20:00, curve calibration; `CAL LAPS`)
 
 From E: remove east of (0,0), east of (1,0), east of (1,2) and north of
 (2,1); add east of (1,1), north of (1,0) and north of (1,1).

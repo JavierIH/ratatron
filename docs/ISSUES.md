@@ -17,6 +17,10 @@ At the robot (`ratatron flash practice`; everything below is in `develop`):
   mass along the robot (a knife-edge balance; its height if possible),
   the skids' gap to the floor (feeler gauge). Then check that race 2.6
   fails in the simulator as on the robot.
+- Long routes on the 4x3 (layout F, the ring): `CAL LAPS 20 300`, then
+  400 and 480 (34 m, 80 curves in one move). The `dist=X/Y` of its
+  `route` line is the along-track error after it (simulator: 0.5 mm);
+  what the OSHWDEM race lost over 74 cells.
 - The IR at an angle (issue 24, ~10 min): in a corner cell, the robot by
   hand at 0, 15, 30, 45, 60, 75, 90 deg about the centre, `CAL NOISE` at
   each; `ratatron sim real-ir` style comparison with the model.

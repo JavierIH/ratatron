@@ -26,6 +26,10 @@ static uint8_t turned;                  // turned in place since the last straig
 static uint16_t cost_a[MAZE_STATES];    // planner buffers
 static uint16_t cost_b[MAZE_STATES];
 static int8_t route_turn[PATH_MAX_CELLS];   // speed-run route: the curve in each cell (path.h)
+
+int8_t *search_route_buffer(void){
+    return route_turn;
+}
 static run_path_t route = {route_turn, 0};
 static search_mode_t mode = SEARCH_STRAIGHTS;
 

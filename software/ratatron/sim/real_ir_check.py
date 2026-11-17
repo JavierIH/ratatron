@@ -7,10 +7,10 @@ from the raw ADC through the firmware's own calibration, the prediction from the
 (docs/mazes.md) with the simulator's rays. Residuals (measured - predicted) are reported on straights and in
 curves, for the readings within the sensors' range.
 
-    ratatron sim real-ir-check LAYOUT run.csv ...     (LAYOUT: C, D, E, F of docs/mazes.md)
+    ratatron sim real-ir LAYOUT run.csv ...     (LAYOUT: C, D, E, F of docs/mazes.md)
 """
 import sys as _sys  # USAGE_GUARD
-if len(_sys.argv) < 3 or any(a in ('-h', '--help') for a in _sys.argv[1:]):
+if __name__ == "__main__" and (len(_sys.argv) < 3 or any(a in ("-h", "--help") for a in _sys.argv[1:])):
     print(__doc__.strip())
     raise SystemExit(0)
 import math
@@ -35,10 +35,7 @@ DELAY_MS = {'FL': 22, 'FR': 22, 'SL': 6, 'SR': 6}   # IR_DELAY_MS (fronts), 4-8 
 
 
 def practice_maze(name):
-    m = Maze(16)
-    for x in range(16):
-        for y in range(16):
-            m.walls[x][y] = 0
+    m = Maze(16)        # the 16x16 border; the 4x3 corner closed below
     for x in range(4):                  # the 4x3 border
         m.set(x, 0, 4)
         m.set(x, 2, N)

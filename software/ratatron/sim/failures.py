@@ -4,7 +4,7 @@
     ratatron sim failures OUT_DIR
 """
 import sys as _sys  # USAGE_GUARD
-if len(_sys.argv) < 2 or any(a in ('-h', '--help') for a in _sys.argv[1:]):
+if __name__ == "__main__" and (len(_sys.argv) < 2 or any(a in ("-h", "--help") for a in _sys.argv[1:])):
     print(__doc__.strip())
     raise SystemExit(0)
 import glob

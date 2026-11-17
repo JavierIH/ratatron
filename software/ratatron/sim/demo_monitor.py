@@ -3,10 +3,10 @@
 monitor (software/ratatron/monitor/monitor.py, in a pseudo-terminal, read back by a terminal emulator) on the right. The
 commands are typed into the monitor's console: MODE 1, START (the search), then MODE 2 6, START (race 2.6).
 
-    ratatron sim demo-monitor demo.mp4      (needs pyte, pillow, ffmpeg)
+    ratatron sim demo demo.mp4      (needs pyte, pillow, ffmpeg)
 """
 import sys as _sys  # USAGE_GUARD
-if len(_sys.argv) < 1 or any(a in ('-h', '--help') for a in _sys.argv[1:]):
+if __name__ == "__main__" and (len(_sys.argv) < 1 or any(a in ("-h", "--help") for a in _sys.argv[1:])):
     print(__doc__.strip())
     raise SystemExit(0)
 import fcntl

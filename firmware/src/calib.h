@@ -13,6 +13,7 @@ typedef enum {
     CAL_CURVE,      // a cell, a smooth curve, a cell (speed run): tracking and where it ends
     CAL_STEP,       // open-loop PWM step then coast: motor model, braking
     CAL_IR,         // back away from a front wall: IR curve vs distance
+    CAL_LAPS,       // laps of the practice maze's ring (layout F) in one move: a long route's along-track error
     CAL_DUMP,       // send the last recording again
     CAL_RUN,        // arm: record the next continuous move of a run (speed run to the goal, search leg)
 } cal_test_t;

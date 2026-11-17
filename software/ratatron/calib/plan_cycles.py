@@ -5,7 +5,7 @@ are a model: check it against the robot's "decisions on the way" line).
 Needs: pip install unicorn pyelftools. Maze files: github.com/micromouseonline/mazefiles.
 usage: ratatron cycles firmware/.pio/build/competition/firmware.elf [mazefile]"""
 import sys as _sys  # USAGE_GUARD
-if len(_sys.argv) < 2 or any(a in ('-h', '--help') for a in _sys.argv[1:]):
+if __name__ == "__main__" and (len(_sys.argv) < 2 or any(a in ("-h", "--help") for a in _sys.argv[1:])):
     print(__doc__.strip())
     raise SystemExit(0)
 import sys

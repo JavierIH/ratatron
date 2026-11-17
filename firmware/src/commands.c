@@ -400,7 +400,7 @@ static void cmd_telem(const char *args){
 static void cmd_cal(const char *args){
     static const struct { const char *name; cal_test_t test; } TESTS[] = {
         {"NOISE", CAL_NOISE}, {"STRAIGHT", CAL_STRAIGHT}, {"TURN", CAL_TURN}, {"CURVE", CAL_CURVE},
-        {"STEP", CAL_STEP}, {"IR", CAL_IR}, {"DUMP", CAL_DUMP}, {"RUN", CAL_RUN},
+        {"STEP", CAL_STEP}, {"IR", CAL_IR}, {"LAPS", CAL_LAPS}, {"DUMP", CAL_DUMP}, {"RUN", CAL_RUN},
     };
     const char *p = skip_spaces(args);
     size_t len = strcspn(p, " ");
@@ -443,6 +443,12 @@ static void cmd_cal(const char *args){
                 a = 200;
                 if(parse_int(&p, &a)) ok = a >= 20 && a <= 300;
                 break;
+            case CAL_LAPS:      // [laps] [curve mm/s]: layout F's ring, straights at FAST
+                a = 10;
+                b = params.curve_speed;
+                if(parse_int(&p, &a) && parse_int(&p, &b)) ok = b >= SPEED_MIN && b <= SPEED_MAX;
+                ok = ok && a >= 1 && a <= 25;
+                break;
             case CAL_DUMP:
             case CAL_RUN:
                 break;
@@ -450,7 +456,7 @@ static void cmd_cal(const char *args){
     }
     if(!ok || !at_end(p)){
         print("CAL NOISE [ms] | STRAIGHT [cells] [mm/s] | TURN [+-quarters] | CURVE [+-1] [mm/s] | STEP [pwm] [ms]"
-              " | IR [mm] | DUMP | RUN\n");
+              " | IR [mm] | LAPS [laps] [mm/s] | DUMP | RUN\n");
         return;
     }
     app_request_cal(TESTS[found].test, a, b);

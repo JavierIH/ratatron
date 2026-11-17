@@ -277,7 +277,7 @@ firmware has no HELP, to save flash). Main ones: `MODE n`, `START`, `STOP`, `PAU
 `LOG 0-2`, `DEFAULTS`, `GOAL x y [x1 y1]`, `SAVE`, `ERASE`, `HOME`, `RESET`,
 `SYNC`, `TELEM ON|OFF`, `CONT ON|OFF` (search straights without stopping, the
 default, or stopping in every cell; until reset),
-`CAL NOISE|STRAIGHT|TURN|CURVE|STEP|IR|DUMP|RUN` (`practice`/`dev` builds; `RUN` arms the recorder
+`CAL NOISE|STRAIGHT|TURN|CURVE|STEP|IR|LAPS|DUMP|RUN` (`practice`/`dev` builds; `RUN` arms the recorder
 for the next continuous move of a run: the speed run to the goal, or a
 search leg; the dump comes when the run ends).
 - Lines starting with `@` are telemetry for the monitor (`@D` = calibration
