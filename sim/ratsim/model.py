@@ -26,19 +26,31 @@ def maze_xml(maze):
     n = maze.size
     geoms = []
 
+    g = C.NOTCH_MM * MM
+
     def block(name, cx, cy, sx, sy, kind='wall'):
         geoms.append(f'<geom name="{name}" class="{kind}" pos="{_f(cx, cy, (h - cap) / 2)}" '
                      f'size="{_f(sx / 2, sy / 2, (h - cap) / 2)}"/>')
-        geoms.append(f'<geom name="{name}_top" class="{kind}_top" pos="{_f(cx, cy, h - cap / 2)}" '
+        geoms.append(f'<geom class="{kind}_top" pos="{_f(cx, cy, h - cap / 2)}" '
                      f'size="{_f(sx / 2, sy / 2, cap / 2)}"/>')
+    # Posts: a slot in every face, so a post is its centre and its four corners (g x g each).
+    q = (t + g) / 4                 # the corners' centres from the post's centre
     for px in range(n + 1):
         for py in range(n + 1):
-            block(f'post_{px}_{py}', px * cell, py * cell, t, t, 'post')
+            cx, cy = px * cell, py * cell
+            block(f'post_{px}_{py}', cx, cy, g, g, 'post')
+            for i, (sx, sy) in enumerate(((1, 1), (1, -1), (-1, 1), (-1, -1))):
+                block(f'post_{px}_{py}_{i}', cx + sx * q, cy + sy * q, (t - g) / 2, (t - g) / 2, 'post')
+    # Walls: from face to face of the posts, a tongue (g x g) at each end in the slot.
     for x, y, kind in maze.segments():
         if kind == 'h':
-            block(f'wall_h_{x}_{y}', (x + 0.5) * cell, y * cell, cell - t, t)
+            cx, cy, along = (x + 0.5) * cell, y * cell, (1, 0)
         else:
-            block(f'wall_v_{x}_{y}', x * cell, (y + 0.5) * cell, t, cell - t)
+            cx, cy, along = x * cell, (y + 0.5) * cell, (0, 1)
+        long_, end = cell - t, (cell - t + g) / 2
+        block(f'wall_{kind}_{x}_{y}', cx, cy, *((long_, t) if kind == 'h' else (t, long_)))
+        for s in (1, -1):
+            block(f'wall_{kind}_{x}_{y}_{"ab"[s < 0]}', cx + s * along[0] * end, cy + s * along[1] * end, g, g)
     side = n * cell
     floor = (f'<geom name="floor" type="plane" pos="{_f(side / 2, side / 2, 0)}" size="{_f(side / 2 + 0.3, side / 2 + 0.3, 0.05)}" '
              f'material="floor" condim="3" friction="0.05 0.001 0.0001"/>')
@@ -92,9 +104,9 @@ def scene_xml(maze):
   </visual>
   <default>
     <default class="wall"><geom type="box" group="{WALL_GROUP}" rgba="0.95 0.95 0.95 1" contype="1" conaffinity="2"/></default>
-    <default class="wall_top"><geom type="box" group="{WALL_GROUP}" rgba="0.85 0.05 0.05 1" contype="1" conaffinity="2"/></default>
+    <default class="wall_top"><geom type="box" group="0" rgba="0.85 0.05 0.05 1" contype="0" conaffinity="0"/></default>
     <default class="post"><geom type="box" group="{WALL_GROUP}" rgba="0.72 0.72 0.75 1" contype="1" conaffinity="2"/></default>
-    <default class="post_top"><geom type="box" group="{WALL_GROUP}" rgba="0.45 0.02 0.02 1" contype="1" conaffinity="2"/></default>
+    <default class="post_top"><geom type="box" group="0" rgba="0.45 0.02 0.02 1" contype="0" conaffinity="0"/></default>
     <default class="visual"><geom type="mesh" group="{ROBOT_GROUP}" contype="0" conaffinity="0" mass="0"/></default>
     <default class="hull"><geom group="3" contype="2" conaffinity="1" rgba="0 0 1 0.1" mass="0" friction="0.3"/></default>
     <default class="skid"><geom group="3" contype="2" conaffinity="1" rgba="0 0 1 0.3" mass="0" friction="0.05 0.001 0.0001"/></default>

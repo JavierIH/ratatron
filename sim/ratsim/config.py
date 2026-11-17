@@ -25,6 +25,7 @@ CELL_MM = FW['CELL_MM']             # 180
 WALL_MM = 12.0                      # wall and post thickness
 WALL_H_MM = 50.0                    # wall height
 CAP_MM = 1.0                        # the red top of every wall and post
+NOTCH_MM = 4.0                      # each post face: a slot this wide and deep, centred; the walls' ends: a tongue in it
 
 # ---- Robot (mm, FreeCAD assembly frame: x right, y forward, z up, origin between the axles at their height) ----
 TIRE_RADIUS_MM = 14.3               # tires x 23..36, z -9.3..19.3 (CAD)

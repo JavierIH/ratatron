@@ -1,7 +1,8 @@
 # RATATRON in MuJoCo
 
 The robot's firmware (`firmware/src`, unchanged) driving the CAD robot in a 16x16 micromouse maze:
-black floor, white walls 50 mm high and 12 mm thick, red tops, 12 mm posts, 180 mm cells.
+black floor, white walls 50 mm high and 12 mm thick, red tops, 180 mm cells; 12 mm posts with a 4 x 4 mm slot
+in every face, the walls ending in a 4 x 4 mm tongue that fits it (an empty slot reads 4 mm deeper on the IR).
 
 ```
 python3 -m venv sim/.venv && sim/.venv/bin/pip install -r sim/requirements.txt
