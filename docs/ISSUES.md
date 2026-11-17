@@ -7,13 +7,13 @@ commit when done. Details go in the docs it points to, not here.
 ## Next session
 
 At the robot (`ratatron flash practice`; everything below is in `develop`):
-- Validate the firmware of 11-17, so far only in the simulator: the
-  curves keep at most 2 deg of the centring's offset, chains of 3+
-  curves at 400, the arrival check of the races (walls vs the map), the
-  RAM savings (`STATUS`: the stack never used, ~2.7 KB expected). A
-  search and races 2.4-2.6 on a practice layout with chained curves (E).
-  Expected (simulator rehearsal, `--maze practice_E`): all OK; races
-  2.5 and 2.6 show `v=900/400`, the staircase being a chain of 6 curves.
+- 11-17 done (`docs/testing.md`, `docs/faults/race-slip-2026-11-17.md`):
+  the firmware of 11-17 validated on E (search, 2.4-2.6, arrival check,
+  RAM), the IR at an angle, `connect` + `send`. Found: at 900 the run-up
+  slipped at `ACCEL` 3000 (5-6.5 deg); the races now at most 2000
+  (`fba2b1f`). Next flash: check it (2.6 on E, the first straight's
+  heading ~0); the 2 deg curve clamp to review first in the simulator
+  with an encoder bias (it throws away a real offset).
 - Measure for the simulator (issue 24), then write them in
   `software/ratatron/sim/config.py`: the mass (a scale), the centre of
   mass along the robot (a knife-edge balance; its height if possible),
@@ -23,11 +23,8 @@ At the robot (`ratatron flash practice`; everything below is in `develop`):
   400 and 480 (34 m, 80 curves in one move). The `dist=X/Y` of its
   `route` line is the along-track error after it (simulator: 0.5 mm);
   what the OSHWDEM race lost over 74 cells.
-- The IR at an angle (issue 24, ~10 min): in a corner cell, the robot by
-  hand at 0, 15, 30, 45, 60, 75, 90 deg about the centre, `CAL NOISE` at
-  each; `ratatron sim real-ir` style comparison with the model.
-- The new tools with the real link: `ratatron connect` (rfcomm0 and the
-  direct RFCOMM socket), `ratatron monitor` and `ratatron send` attached
+- The new tools with the real link: `ratatron connect` via rfcomm0 (the
+  RFCOMM socket and `send` work, 11-17), `ratatron monitor` attached
   at once; the monitor's new look live.
 
 Without the robot:

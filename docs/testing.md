@@ -10,6 +10,35 @@ Nothing waits for the robot. Next by `docs/roadmap.md`: the large maze
 (a long stretch), with it the two ways to search compared and the legs
 at 600. Charge the battery first (11-13: `pace=90-95%` at 900).
 
+## Robot session of 11-17 (results)
+
+Flashed `practice` 21:47 (develop b2ef029: the curves' 2 deg clamp, chains
+of 3+ curves at 400, the races' arrival check, the RAM savings), layout E.
+Log `software/logs/2026-11-17_21-48-02.log`, recordings
+`software/calib_data/2026-11-17_*`. Details: `faults/race-slip-2026-11-17.md`.
+
+1. RAM: `STATUS` at boot, stack never used 3292 B (expected ~2.7 KB).
+2. `ratatron connect` (RFCOMM socket, no rfcomm0) and `ratatron send`
+   attached to it: every command of the session went through them.
+3. A search after `ERASE`: `End: OK`, 31 actions, no "!!", fast path cost
+   24, the staircase; planner worst 4.6 ms (1024 pops), late 0.
+4. Race 2.4 with dirty wheels: into the inner post of the last curve
+   (`end=WALL`, `BLOCKED at (3,1)N`); the arrival check stopped it as meant.
+   Wheels cleaned: 2.4 at 400/300 and 800/300, 2.5 once, 2.6 four times,
+   all `End: OK` both ways; the chains at 400 as expected (`v=900/400`).
+5. At 900 with `ACCEL` 3000 the run-up slips: the encoder heading 5-6.5
+   deg off the walls, 2.5 entered the last straight 22.7 mm to the inside.
+   `ACCEL` 2000: -0.4 deg, entries -0.6 / +10.4 mm, the same time to the
+   goal. Now the races' limit (`RACE_ACCEL_MM_S2`, next flash).
+6. The IR at an angle: in (3,0) (walls south and east), one slow 90 deg turn
+   (`TURN 50`, `CAL TURN 1`, back with `CAL TURN -1`; it came back square by
+   eye), against the simulator's model at the cell centre: SL/SR within 3
+   mm from 0 to 75 deg (SR -5/-8 at 75/90), FL/FR a steady -6 to -9 mm at
+   30-90 deg (a centring of the placement or the front calibration: the
+   angle shape is the model's). Out and back agree within 2 mm (the
+   model's IR delay holds). Script: the session's scratchpad `irangle.py`
+   (a sweep through `real_ir_check`'s `load`/`predict` at a fixed pose).
+
 ## Robot session of 11-13 (results)
 
 Flashed `practice` 20:11 (the audit of 11-11, the wall-end hold,
