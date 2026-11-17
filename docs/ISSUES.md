@@ -98,15 +98,15 @@ Without the robot:
   by the time: not conclusive. Next at the robot (~10 min): in a corner
   cell, the robot placed by hand at 0, 15, 30, 45, 60, 75 and 90 deg
   about the cell centre, `CAL NOISE` at each: the side and front
-  readings against the angle with known geometry.
-- Branch `ram-savings` (11-17): 1.1 KB of RAM freed (planner queue 512
-  with an exact overflow, IR trail 32 ms, centring average 16):
-  competition 47.2 %, dev 78.9 %. Host tests (also with a 16-state
-  queue, in CI) and the simulator pass; to merge after a robot check.
-  Then the robot (mass, centre of mass, skid gap) before trusting any of it.
-
+  readings against the angle with known geometry. Done 11-17 as one slow
+  turn (`docs/testing.md`): the sides match the model within 3 mm, the
+  fronts a steady -6 to -9 mm.
 ## Closed
 
+- 2026-11-17 RAM savings (`ram-savings`, merged into develop): 1.1 KB
+  freed (planner queue 512 with an exact overflow, IR trail 32 ms,
+  centring average 16); on the robot 11-17: stack never used 3292 B, a
+  search and races 2.4-2.6 clean on E.
 - 2026-11-16 One repo for the whole robot (issue 23): the firmware repo
   (`rat_sw`) merged into the hardware's (`ratatron`), every commit with
   its hash, as `electronics/`, `mechanics/`, `firmware/`, `software/`,
