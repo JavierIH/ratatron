@@ -26,31 +26,33 @@ def maze_xml(maze):
     n = maze.size
     geoms = []
 
-    g = C.NOTCH_MM * MM
+    sw, sd = C.SLOT_W_MM * MM, C.SLOT_D_MM * MM
 
     def block(name, cx, cy, sx, sy, kind='wall'):
         geoms.append(f'<geom name="{name}" class="{kind}" pos="{_f(cx, cy, (h - cap) / 2)}" '
                      f'size="{_f(sx / 2, sy / 2, (h - cap) / 2)}"/>')
         geoms.append(f'<geom class="{kind}_top" pos="{_f(cx, cy, h - cap / 2)}" '
                      f'size="{_f(sx / 2, sy / 2, cap / 2)}"/>')
-    # Posts: a slot in every face, so a post is its centre and its four corners (g x g each).
-    q = (t + g) / 4                 # the corners' centres from the post's centre
+    # Posts: a slot in every face, so a post is a core inside the slots' bottoms and four corner blocks beside them.
+    core, corner = t - 2 * sd, (t - sw) / 2
+    q = (t + sw) / 4                # the corner blocks' centres from the post's centre
     for px in range(n + 1):
         for py in range(n + 1):
             cx, cy = px * cell, py * cell
-            block(f'post_{px}_{py}', cx, cy, g, g, 'post')
+            block(f'post_{px}_{py}', cx, cy, core, core, 'post')
             for i, (sx, sy) in enumerate(((1, 1), (1, -1), (-1, 1), (-1, -1))):
-                block(f'post_{px}_{py}_{i}', cx + sx * q, cy + sy * q, (t - g) / 2, (t - g) / 2, 'post')
-    # Walls: from face to face of the posts, a tongue (g x g) at each end in the slot.
+                block(f'post_{px}_{py}_{i}', cx + sx * q, cy + sy * q, corner, corner, 'post')
+    # Walls: from face to face of the posts, a tongue (slot wide, slot deep) at each end in the slot.
     for x, y, kind in maze.segments():
         if kind == 'h':
             cx, cy, along = (x + 0.5) * cell, y * cell, (1, 0)
         else:
             cx, cy, along = x * cell, (y + 0.5) * cell, (0, 1)
-        long_, end = cell - t, (cell - t + g) / 2
+        long_, end = cell - t, (cell - t + sd) / 2
         block(f'wall_{kind}_{x}_{y}', cx, cy, *((long_, t) if kind == 'h' else (t, long_)))
+        tongue = (sd, sw) if kind == 'h' else (sw, sd)
         for s in (1, -1):
-            block(f'wall_{kind}_{x}_{y}_{"ab"[s < 0]}', cx + s * along[0] * end, cy + s * along[1] * end, g, g)
+            block(f'wall_{kind}_{x}_{y}_{"ab"[s < 0]}', cx + s * along[0] * end, cy + s * along[1] * end, *tongue)
     side = n * cell
     floor = (f'<geom name="floor" type="plane" pos="{_f(side / 2, side / 2, 0)}" size="{_f(side / 2 + 0.3, side / 2 + 0.3, 0.05)}" '
              f'material="floor" condim="3" friction="0.05 0.001 0.0001"/>')
