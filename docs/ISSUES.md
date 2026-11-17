@@ -61,8 +61,16 @@ commit when done. Details go in the docs it points to, not here.
   wide; chained curves turn it into an along-track error), and the
   centring turning in place while braking (the goal reached 11 deg off).
   Branch `sim-steer-ds`: the offset clamped to 2 deg at each curve, 2.4
-  fails 8 %, 2.6 17.5 % (simulator only). Next: the 2.6 curves at 480,
-  then the robot (mass, centre of mass, skid gap) before trusting any of it.
+  fails 8 %, 2.6 17.5 % (simulator only). Curves (`sim/tools/curves.py`,
+  mazes spiral, stairs): single curves clean up to 480; chains of curves
+  drift sideways every curve with no feedback (stairs: 2.6 crashes at
+  the 11th). Prototype C (same branch): routes with 3+ chained curves at
+  400 at most. Race-only, same maps: 2.4 fails 12.4 -> 7.5 %, 2.6 16.8 ->
+  7.4 %, 2.6 median time to the goal 13.3 -> 14.5 s; C breaks 4 host tests
+  (the planner still prices chains at 480). IR in curves
+  (`curve_ir_info.py`): ideal sensors fix the position to ~1 mm per curve;
+  next, CAL RUN curves on the robot to see if the real Sharp agrees.
+  Then the robot (mass, centre of mass, skid gap) before trusting any of it.
 
 ## Closed
 
