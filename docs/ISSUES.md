@@ -26,6 +26,11 @@ At the robot (`ratatron flash practice`; everything below is in `develop`):
 
 Without the robot:
 - The 3D viewer (`ratatron sim` with a screen) is untested.
+- Better 3D files of the robot from the user: the FreeCAD file holds
+  several design iterations (the parts were picked by hand,
+  `software/ratatron/sim/export_cad.py`), shows 4 LEDs of the board's 6
+  and no clear skid; with clean, current parts (and the real skids) the
+  simulator's geometry and collisions can be exact.
 - The competition gives 7 minutes for the search and the races
   together (the user, 11-13): the OPTIM phase stays as it is.
 - Next by `docs/roadmap.md`: the large maze (issue 11, deferred until a
