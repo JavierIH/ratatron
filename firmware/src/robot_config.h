@@ -139,6 +139,7 @@
 #define PARAM_FAST_SPEED        900     // mm/s, never below SPD (the motor model holds ~937)
 #define PARAM_CURVE_SPEED       480     // mm/s, capped by FAST, the braking room and CURVE_PWM_SHARE
 #define PARAM_ACCEL             3000    // mm/s^2 of every straight, up and down (5000 slipped)
+#define RACE_ACCEL_MM_S2        2000.0f // ...but at most this in a route's run (races, CAL): 3000 to 900 slipped 5-6 deg (11-17)
 #define PARAM_TURN_SPEED        500     // deg/s peak of in-place turns
 #define PARAM_TURN_ACCEL        5000    // deg/s^2: a 90 deg turn takes ~0.3 s
 #define PARAM_TURN_TICKS        TICKS_PER_TURN

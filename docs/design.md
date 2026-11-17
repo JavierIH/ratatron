@@ -24,6 +24,11 @@ behind the constants: docs/measurements.md. AGENTS.md has the rules.
   `robot_config.h`.
 - `ACCEL` 3000 mm/s^2 is near the grip limit: at 5000 the wheels slipped
   when braking (the encoders stopped on target, the robot 6 mm further).
+  A route's run (races, `CAL`) takes at most 2000 (`RACE_ACCEL_MM_S2`):
+  at 3000 the run-up to 900 hit the PWM limit and slipped, the encoder
+  heading 5-6.5 deg off the walls, carried by the curves that followed
+  (11-17, layout E). The search keeps 3000: its legs decide each cell at
+  the braking point, and later braking keeps the cell's walls in view.
 - The IR (Sharp-type, a new value every ~16 ms) report the past. The front
   sensors are paired with where the robot was `IR_DELAY_MS` (22) earlier
   (wall approaches at 600-900 mm/s: FL 16-24, FR 24-32 ms; in-place turns

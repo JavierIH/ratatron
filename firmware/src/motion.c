@@ -490,7 +490,8 @@ static move_result_t run_path(const run_path_t *path, int16_t cruise_speed, int1
     // TUNE only takes curves that fit, and search.c builds valid paths.
     if(!curve_from_tuning(&curve)
        || !path_start(&run, path, &curve, CELL_MM, (float)cruise_speed,
-                      fminf((float)curve_speed, curve_speed_limit(&curve)), (float)params.accel)){
+                      fminf((float)curve_speed, curve_speed_limit(&curve)),
+                      ex ? (float)params.accel : fminf((float)params.accel, RACE_ACCEL_MM_S2))){
         print("!! invalid route\n");
         return MOVE_LOST;
     }
