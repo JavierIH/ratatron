@@ -21,6 +21,10 @@ commit when done. Details go in the docs it points to, not here.
   replays and the pty tests only, not yet with the live robot. If the
   maze shows as boxes in a terminal: `--pixels half`.
 
+- 11-17: `develop` has, not yet on the robot: the curves keep at most
+  2 deg of the centring's offset, chains of 3+ curves at 400, the RAM
+  savings (planner queue 512). Check them at the next flash (issue 24).
+
 ## Open
 
 - Issue 22, review of 10-22 and audit of 11-11 (`docs/review.md`, last
