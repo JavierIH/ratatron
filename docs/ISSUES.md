@@ -12,6 +12,8 @@ At the robot (`ratatron flash practice`; everything below is in `develop`):
   curves at 400, the arrival check of the races (walls vs the map), the
   RAM savings (`STATUS`: the stack never used, ~2.7 KB expected). A
   search and races 2.4-2.6 on a practice layout with chained curves (E).
+  Expected (simulator rehearsal, `--maze practice_E`): all OK; races
+  2.5 and 2.6 show `v=900/400`, the staircase being a chain of 6 curves.
 - Measure for the simulator (issue 24), then write them in
   `software/ratatron/sim/config.py`: the mass (a scale), the centre of
   mass along the robot (a knife-edge balance; its height if possible),
