@@ -26,14 +26,14 @@ def maze_xml(maze):
     n = maze.size
     geoms = []
 
-    def block(name, cx, cy, sx, sy):
-        geoms.append(f'<geom name="{name}" class="wall" pos="{_f(cx, cy, (h - cap) / 2)}" '
+    def block(name, cx, cy, sx, sy, kind='wall'):
+        geoms.append(f'<geom name="{name}" class="{kind}" pos="{_f(cx, cy, (h - cap) / 2)}" '
                      f'size="{_f(sx / 2, sy / 2, (h - cap) / 2)}"/>')
-        geoms.append(f'<geom name="{name}_top" class="wall_top" pos="{_f(cx, cy, h - cap / 2)}" '
+        geoms.append(f'<geom name="{name}_top" class="{kind}_top" pos="{_f(cx, cy, h - cap / 2)}" '
                      f'size="{_f(sx / 2, sy / 2, cap / 2)}"/>')
     for px in range(n + 1):
         for py in range(n + 1):
-            block(f'post_{px}_{py}', px * cell, py * cell, t, t)
+            block(f'post_{px}_{py}', px * cell, py * cell, t, t, 'post')
     for x, y, kind in maze.segments():
         if kind == 'h':
             block(f'wall_h_{x}_{y}', (x + 0.5) * cell, y * cell, cell - t, t)
@@ -93,6 +93,8 @@ def scene_xml(maze):
   <default>
     <default class="wall"><geom type="box" group="{WALL_GROUP}" rgba="0.95 0.95 0.95 1" contype="1" conaffinity="2"/></default>
     <default class="wall_top"><geom type="box" group="{WALL_GROUP}" rgba="0.85 0.05 0.05 1" contype="1" conaffinity="2"/></default>
+    <default class="post"><geom type="box" group="{WALL_GROUP}" rgba="0.72 0.72 0.75 1" contype="1" conaffinity="2"/></default>
+    <default class="post_top"><geom type="box" group="{WALL_GROUP}" rgba="0.45 0.02 0.02 1" contype="1" conaffinity="2"/></default>
     <default class="visual"><geom type="mesh" group="{ROBOT_GROUP}" contype="0" conaffinity="0" mass="0"/></default>
     <default class="hull"><geom group="3" contype="2" conaffinity="1" rgba="0 0 1 0.1" mass="0" friction="0.3"/></default>
     <default class="skid"><geom group="3" contype="2" conaffinity="1" rgba="0 0 1 0.3" mass="0" friction="0.05 0.001 0.0001"/></default>
