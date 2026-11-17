@@ -23,9 +23,8 @@ At the robot (`ratatron flash practice`; everything below is in `develop`):
   400 and 480 (34 m, 80 curves in one move). The `dist=X/Y` of its
   `route` line is the along-track error after it (simulator: 0.5 mm);
   what the OSHWDEM race lost over 74 cells.
-- The new tools with the real link: `ratatron connect` via rfcomm0 (the
-  RFCOMM socket and `send` work, 11-17), `ratatron monitor` attached
-  at once; the monitor's new look live.
+- `ratatron connect` via rfcomm0 (11-17: the RFCOMM socket, `send` and
+  `monitor` attached at once all work, the monitor's map right).
 
 Without the robot:
 - The 3D viewer (`ratatron sim` with a screen) is untested.
