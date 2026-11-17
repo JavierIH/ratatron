@@ -306,3 +306,26 @@ The user's diagnosis (11-16), no log of the day:
   (races only read the map since c41d383).
 - Not yet seen on a long stretch of the real robot: issue 11 (a large
   stretch) is the test.
+
+### 7.1 The video of the race (analysed 11-17)
+
+A 39 s phone video of the race (youtube.com/shorts/7yqesRGJzrY), set
+against the maze (`sim/mazes/oshwdem2026.txt`, the corrected copy of
+11-10) in the MuJoCo simulator (`sim/`, current firmware, race 2.4):
+- The robot was not lost for the run: it followed the verified route
+  (92 cells, 35 curves; north 7 on column 0, the top row, down the right
+  side, back west through rows 0-4) for about 74 cells. It left at about
+  11.3 s and reached (1,1) heading west at about 35.5 s, 24.2 s later.
+  The simulator reaches the same cell at 24.5 s.
+- It failed at the curve right (west to north) in (1,1), the 74th cell:
+  it ended against the post at the curve's inner corner, (2,2), the
+  south-west corner of the box above row 1. It stood there about 2.5 s
+  until picked up.
+- So the pose was off only at that curve, by enough to cut the inner
+  corner. Two causes fit, and the video cannot tell them apart: the
+  curve started early (24 s of odometry with no front wall to reset it
+  along the way), or the robot ran off-centre towards the inside (the old
+  centring held it parallel but off the centre line, the diagnosis
+  above).
+- In the simulator the current firmware runs the whole route there and
+  back without touching (2.4).

@@ -52,7 +52,8 @@ class Maze:
     # ---- text --------------------------------------------------------------------------------------------
     @classmethod
     def parse(cls, text):
-        lines = [l.rstrip('\n') for l in text.splitlines() if l.strip()]
+        lines = [l.rstrip('\r\n').lstrip('\ufeff') for l in text.splitlines()]
+        lines = [l for l in lines if l[:1] in ('o', '|', '+')]     # no headers (e.g. the OSHWDEM generator's)
         size = (len(lines) - 1) // 2
         if size < 2 or len(lines) != 2 * size + 1:
             raise ValueError(f"not a maze file: {len(lines)} lines")
