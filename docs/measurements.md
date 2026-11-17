@@ -22,7 +22,10 @@ The numbers behind the constants that docs/design.md does not already give
   readings err short (the wall looks closer), so it brakes a bit early and
   the target recedes as they improve. `FRONT_TRACK_REF_MM` 92: aiming at
   94 (`FRONT_WALL_REF_MM`) itself ended 2-4 mm long (a front realignment
-  in 5 of a search's stops); at 92 the stops read 93-94.
+  in 5 of a search's stops); at 92 the stops read 93-94. Both references are
+  readings, not positions: centred, the front pair reads ~88 (11-17, without
+  the placement: `docs/faults/front-ir-offset-2026-11-17.md`), so the stops
+  end ~4-6 mm before the centre; to confirm with a ruler before changing them.
 - Side centre readings, before the 09-27 rounds: 180 deg pairs gave SR
   87/65 and SL 76/101 (twice alike); centring on 84 kept the robot ~8 mm
   towards the left wall; hand-centred readings SR 76-80, SL 84-89.

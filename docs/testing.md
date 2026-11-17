@@ -34,9 +34,10 @@ Log `software/logs/2026-11-17_21-48-02.log`, recordings
    (`TURN 50`, `CAL TURN 1`, back with `CAL TURN -1`; it came back square by
    eye), against the simulator's model at the cell centre: SL/SR within 3
    mm from 0 to 75 deg (SR -5/-8 at 75/90), FL/FR a steady -6 to -9 mm at
-   30-90 deg (a centring of the placement or the front calibration: the
-   angle shape is the model's). Out and back agree within 2 mm (the
-   model's IR delay holds). Script: the session's scratchpad `irangle.py`
+   30-90 deg (the angle shape is the model's). Out and back agree within
+   2 mm (the model's IR delay holds). The fronts' -6 to -9 is the front
+   calibration, ~-6 mm without the placement (`CHECK` of 10-08), plus
+   1-2.5 mm of placement: `faults/front-ir-offset-2026-11-17.md`. Script: the session's scratchpad `irangle.py`
    (a sweep through `real_ir_check`'s `load`/`predict` at a fixed pose).
 
 7. Long routes on layout F (`CAL LAPS 20 V`, 202 cells and 80 curves in
