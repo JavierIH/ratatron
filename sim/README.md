@@ -22,6 +22,9 @@ pseudo-terminal the simulator opens; `--no-pty` without it). `--poses` prints th
 pose the firmware reports; "POSE LOST" whenever they disagree, "touches a wall" when the hull does.
 The flash (saved map) lives in `sim/build/flash.bin` between runs, as on the robot.
 
+`sim/tools/demo_monitor.py out.mp4` records the simulator and the monitor together with no screen (the monitor in
+a pseudo-terminal, read back with pyte; its commands typed into its console).
+
 The viewer needs a monitor: with none (a remote session) GLFW aborts; use `--headless` (and `--record`).
 
 ## How it works

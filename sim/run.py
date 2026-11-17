@@ -284,7 +284,7 @@ class Recorder:
         self.ff.wait()
 
 
-def main():
+def make_parser():
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     p.add_argument('--maze', help='maze file (micromouseonline text format); default: generated')
     p.add_argument('--seed', type=int, default=1, help='generated maze and sensor noise seed')
@@ -309,29 +309,39 @@ def main():
     p.add_argument('--record', metavar='MP4', help='headless: record a video (ffmpeg)')
     p.add_argument('--record-speed', type=float, default=2.0, help='video speed while the robot runs (default 2x)')
     p.add_argument('--save-maze', help='write the maze to this file and go on')
-    args = p.parse_args()
+    return p
 
+
+def open_port(s, path):
+    """The robot's Bluetooth port for the monitor: a pseudo-terminal linked at `path`. The slave stays open here, so
+    the port survives monitors coming and going; non-blocking: with no monitor the output is lost, not the run."""
+    import pty
+    import tty
+    master, slave = pty.openpty()
+    tty.setraw(slave)
+    os.set_blocking(master, False)
+    s.pty_fd = master
+    try:
+        os.remove(path)
+    except OSError:
+        pass
+    os.symlink(os.ttyname(slave), path)
+    threading.Thread(target=s.pty_reader, daemon=True).start()
+    return slave
+
+
+def main():
+    args = make_parser().parse_args()
     s = Session(args)
     if args.save_maze:
         with open(args.save_maze, 'w') as f:
             f.write(s.maze.text())
     link = None
     if not args.no_pty:
-        import pty
-        import tty
-        master, slave = pty.openpty()       # the slave stays open here: the port survives monitors coming and going
-        tty.setraw(slave)
-        os.set_blocking(master, False)
-        s.pty_fd = master
         link = args.port
-        try:
-            os.remove(link)
-        except OSError:
-            pass
-        os.symlink(os.ttyname(slave), link)
+        open_port(s, link)
         print(f'## the robot\'s Bluetooth port: {os.path.relpath(link)}  '
               f'(python3 software/robot_monitor.py --port {os.path.relpath(link)})', flush=True)
-        threading.Thread(target=s.pty_reader, daemon=True).start()
     for c in args.cmd:
         s.inbox.put(c)
     if not args.headless or not args.cmd:
