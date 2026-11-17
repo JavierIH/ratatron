@@ -54,7 +54,15 @@ commit when done. Details go in the docs it points to, not here.
   knife-edge balance), then write them in `sim/ratsim/config.py` (`MASS_KG`,
   `COM_MM`, now estimated: the fast curves depend on them) and check that
   2.6 fails in the simulator as on the robot. The viewer is untested (no
-  monitor in that session); runs on the 520 real mazes not done yet.
+  monitor in that session). 11-17: 525 real mazes (`sim/tools/batch.py`):
+  searches 523/525 (2 unreachable goals), races 2.4 fail 13.6 % and 2.6
+  20 %, almost all touching in curves. Causes found: the centring's
+  heading offset kept through a curve (a curve begun mid-correction turns
+  wide; chained curves turn it into an along-track error), and the
+  centring turning in place while braking (the goal reached 11 deg off).
+  Branch `sim-steer-ds`: the offset clamped to 2 deg at each curve, 2.4
+  fails 8 %, 2.6 17.5 % (simulator only). Next: the 2.6 curves at 480,
+  then the robot (mass, centre of mass, skid gap) before trusting any of it.
 
 ## Closed
 
