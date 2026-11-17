@@ -8,6 +8,7 @@ import argparse
 import csv
 import os
 import re
+import shutil
 import subprocess
 import sys
 import time
@@ -17,14 +18,24 @@ SIM = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 PY = os.path.join(SIM, '.venv', 'bin', 'python')
 
 
-def run_one(maze, out, races, max_s):
+def run_one(maze, out, races, max_s, maps=None):
     name = os.path.splitext(os.path.basename(maze))[0]
     log = os.path.join(out, name + '.log')
-    cmd = [PY, os.path.join(SIM, 'run.py'), '--headless', '--speed', '0', '--no-pty', '--erase-flash',
-           '--flash', os.path.join(out, name + '.bin'), '--maze', maze, '--timestamps', '--max-s', str(max_s),
-           '--until-idle', '--cmd', 'MODE 1', '--cmd', 'START']
+    flash = os.path.join(out, name + '.bin')
+    cmd = [PY, os.path.join(SIM, 'run.py'), '--headless', '--speed', '0', '--no-pty', '--flash', flash,
+           '--maze', maze, '--timestamps', '--max-s', str(max_s), '--until-idle']
+    if maps:        # the map a search saved before: only the races (for changes the search does not use)
+        shutil.copy(os.path.join(maps, name + '.bin'), flash)
+        steps = []
+    else:
+        cmd += ['--erase-flash']
+        steps = ['MODE 1', 'START']
     for r in races:
-        cmd += ['--cmd', ':wait-idle', '--cmd', f'MODE {r}', '--cmd', 'START']
+        if steps:
+            steps.append(':wait-idle')
+        steps += [f'MODE {r}', 'START']
+    for c in steps:
+        cmd += ['--cmd', c]
     t0 = time.monotonic()
     with open(log, 'w') as f:
         p = subprocess.run(cmd, stdout=f, stderr=subprocess.STDOUT, timeout=max_s * 2 + 600)
@@ -66,13 +77,14 @@ def main():
     p.add_argument('--workers', type=int, default=10)
     p.add_argument('--races', default='2 4,2 6', help='race menu entries after the search, comma separated')
     p.add_argument('--max-s', type=int, default=1500, help='simulated seconds per maze at most')
+    p.add_argument('--maps', help='a batch dir whose saved maps (*.bin) replace the search')
     a = p.parse_args()
     os.makedirs(a.out, exist_ok=True)
     subprocess.run(['make', '-s', '-C', os.path.join(SIM, 'fw')], check=True)
     races = [r.strip() for r in a.races.split(',') if r.strip()]
     rows, t0 = [], time.monotonic()
     with ThreadPoolExecutor(a.workers) as ex:
-        futures = [ex.submit(run_one, m, a.out, races, a.max_s) for m in a.mazes]
+        futures = [ex.submit(run_one, m, a.out, races, a.max_s, a.maps) for m in a.mazes]
         for i, f in enumerate(futures, 1):
             try:
                 row = f.result()
