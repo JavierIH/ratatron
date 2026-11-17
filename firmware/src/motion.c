@@ -181,6 +181,10 @@ void motion_tick_1ms(void){
     if(steer_on){
         // In a curve, and until the IR read the new corridor, hold the heading offset; then start afresh.
         if(path_on && !(run.s < run.curve_start && fwd_at_ir() >= run.last_curve_end)){
+            if(!steer_blind){   // PROTOTYPE B: a curve keeps only what can be drift of the centring's offset
+                if(steer.heading > 2.0f) steer.heading = 2.0f;
+                if(steer.heading < -2.0f) steer.heading = -2.0f;
+            }
             steer_blind = 1;
             heading = steer.heading;
             leds_set_mask(0);
