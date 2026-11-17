@@ -33,13 +33,14 @@ ratatron connect --sim               # then ratatron monitor / ratatron send, as
   offset per sensor so the firmware's reference readings hold centred in a cell.
 - Robot: CAD meshes (`export_cad.py`, FreeCAD headless: every part visible in
   `mechanics/freecad/ratatron.fcstd`, one mesh per colour); collisions: 2 mm tire bands at the track that gives a
-  90 deg turn its 403 ticks, a box hull, skids 0.5 mm off the floor.
+  90 deg turn its 403 ticks, a box hull, the CAD's skids (R 13 mm caps at y +26 and -23 mm, 0.3 mm off the
+  floor).
 
 ## Calibrated, assumed, open
 
 - Matched to the robot: front stops (median -5.4 mm vs -5.3 on 44 real stops), in-place turns, curve slip
   (~2 deg per 90 at 500 mm/s).
 - **Assumed, to be measured** (issue 24): mass 100 g, centre of mass on the axle (from the CAD by parts), skid
-  gap 0.5 mm, tire friction 0.6. Fast curves depend on them: the simulator is more optimistic than the robot.
+  gap 0.3 mm (the CAD's, tires unloaded), tire friction 0.6. Fast curves depend on them: the simulator is more optimistic than the robot.
 - The 525 real mazes (11-17): searches 523/525 (2 goals unreachable), and what the races taught is in
   `docs/ISSUES.md`, issue 24.

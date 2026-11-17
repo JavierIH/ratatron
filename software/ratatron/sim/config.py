@@ -42,8 +42,11 @@ MASS_KG = 0.100                     # assumed (not measured): micromouse of this
 # Centre of mass, estimated from the CAD by parts (2S LiPo ~25 g behind the axle at y -22; motors, wheels and PCB on
 # it; the printed body and the sensors ahead): on the axle. 6 mm ahead made every fast curve slide wide.
 COM_MM = (0.0, 0.5, 8.0)
-SKID_GAP_MM = 0.5                   # assumed: the skids (front y +18, back y -22) this far up limit the pitch (to be measured)
-SKID_Z_MM = GROUND_Z_MM + SKID_GAP_MM
+# Skids (CAD): spherical caps R 13 mm, 10 mm across, lowest point at z -9.0 (0.3 mm above the nominal floor; the
+# real gap, tires loaded, still to be measured), on the centre line at y +26 (front) and -23 (back).
+SKID_Y_MM = (26.0, -23.0)
+SKID_R_MM = 13.0
+SKID_Z_MM = -9.0
 # Sensors (Sharp GP2Y0A51SK0F, 27 mm tall bodies in the CAD): the centre of each front face, its direction (deg
 # from +x, counter-clockwise): FL/FR outside, facing forward; SL/SR at the nose, angled 15 deg forward.
 IR_SENSORS = {          # name: (firmware index, ADC channel, (x, y, z) mm, direction deg)

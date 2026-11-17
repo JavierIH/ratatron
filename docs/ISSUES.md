@@ -34,8 +34,8 @@ Without the robot:
 - The 3D viewer (`ratatron sim` with a screen) is untested.
 - The robot's 3D model (11-17): `mechanics/freecad/ratatron.fcstd`, only the
   final parts visible; `export_cad.py` exports what is visible in FreeCAD's
-  colours (N20s coloured as Pololu's: brass plates, steel gears). Next: the
-  collisions from the CAD's skids (y +26 and -23 mm, the sim has +18/-22).
+  colours (N20s coloured as Pololu's: brass plates, steel gears); the
+  sim's skids are the CAD's (search and race 2.6 on oshwdem2026 unchanged).
 - The competition gives 7 minutes for the search and the races
   together (the user, 11-13): the OPTIM phase stays as it is.
 - Next by `docs/roadmap.md`: the large maze (issue 11, deferred until a

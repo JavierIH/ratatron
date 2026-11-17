@@ -77,14 +77,17 @@ def robot_xml():
         <geom name="tire_{side}" class="tire" type="cylinder" size="{_f(r, 0.001)}" euler="0 90 0" mass="0.004"/>
         {vis}
       </body>'''
+    # The CAD's caps as their whole spheres: the same contact with the floor, the rest inside the hull.
+    skids = ''.join(f'<geom name="skid_{name}" class="skid" type="sphere" '
+                    f'pos="{_f(0, y * MM, (C.SKID_Z_MM + C.SKID_R_MM) * MM)}" size="{C.SKID_R_MM * MM:.6g}"/>'
+                    for name, y in zip(('front', 'rear'), C.SKID_Y_MM))
     com = _f(*(v * MM for v in C.COM_MM))
     return f'''
     <body name="robot" pos="{_f(0.5 * C.CELL_MM * MM, 0.5 * C.CELL_MM * MM, z0)}">
       <freejoint name="robot"/>
       <inertial pos="{com}" mass="{C.MASS_KG - 0.008:.4f}" diaginertia="5e-5 4e-5 7e-5"/>
       <geom name="hull" class="hull" type="box" pos="{_f(0, 8 * MM, 15 * MM)}" size="{_f(36 * MM, 37 * MM, 20 * MM)}"/>
-      <geom name="skid_front" class="skid" type="sphere" pos="{_f(0, 18 * MM, (C.SKID_Z_MM + 2.5) * MM)}" size="0.0025"/>
-      <geom name="skid_rear" class="skid" type="sphere" pos="{_f(0, -22 * MM, (C.SKID_Z_MM + 2.5) * MM)}" size="0.0025"/>
+      {skids}
       {meshes}{leds}{sites}{wheels}
     </body>'''
 
