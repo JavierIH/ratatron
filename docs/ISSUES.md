@@ -47,6 +47,15 @@ commit when done. Details go in the docs it points to, not here.
   (the long-corridor centring check of OSHWDEM goes with it). The
   baseboard oscillation check is dropped (11-16: no means to do it).
 
+- Issue 24, MuJoCo simulator (`sim/`, `sim/README.md`): the firmware
+  (unchanged) on a simulated chip drives the CAD robot in a 16x16 maze;
+  search and races 2.4-2.6 clean on a generated maze (11-17). Next, at
+  the robot: weigh it and measure its centre of mass (along the axis, a
+  knife-edge balance), then write them in `sim/ratsim/config.py` (`MASS_KG`,
+  `COM_MM`, now estimated: the fast curves depend on them) and check that
+  2.6 fails in the simulator as on the robot. The viewer is untested (no
+  monitor in that session); runs on the 520 real mazes not done yet.
+
 ## Closed
 
 - 2026-11-16 One repo for the whole robot (issue 23): the firmware repo

@@ -29,7 +29,8 @@ One repo for the whole robot (since 2026-11-16; before, the firmware was
 `rat_sw` and this repo held only the hardware): `electronics/` (KiCad),
 `mechanics/` (FreeCAD, STL), `firmware/` (PlatformIO project: `src/`,
 `lib/`, `test/host/`), `software/` (PC tools, session logs, calibration
-recordings), `docs/`. A file's history before the move: `git log --follow`.
+recordings), `sim/` (MuJoCo simulator: the firmware on a simulated chip
+driving the CAD robot in a 16x16 maze, `sim/README.md`), `docs/`. A file's history before the move: `git log --follow`.
 
 ## Project objective
 "rat": micromouse firmware for an STM32F103 robot. It explores an
