@@ -310,7 +310,7 @@ The user's diagnosis (11-16), no log of the day:
 ### 7.1 The video of the race (analysed 11-17)
 
 A 39 s phone video of the race (youtube.com/shorts/7yqesRGJzrY), set
-against the maze (`sim/mazes/oshwdem2026.txt`, the corrected copy of
+against the maze (`software/ratatron/sim/mazes/oshwdem2026.txt`, the corrected copy of
 11-10) in the MuJoCo simulator (`sim/`, current firmware, race 2.4):
 - The robot was not lost for the run: it followed the verified route
   (92 cells, 35 curves; north 7 on column 0, the top row, down the right

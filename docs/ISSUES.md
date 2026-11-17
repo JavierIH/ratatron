@@ -51,21 +51,21 @@ commit when done. Details go in the docs it points to, not here.
   (the long-corridor centring check of OSHWDEM goes with it). The
   baseboard oscillation check is dropped (11-16: no means to do it).
 
-- Issue 24, MuJoCo simulator (`sim/`, `sim/README.md`): the firmware
+- Issue 24, MuJoCo simulator (`ratatron sim`, `docs/simulator.md`): the firmware
   (unchanged) on a simulated chip drives the CAD robot in a 16x16 maze;
   search and races 2.4-2.6 clean on a generated maze (11-17). Next, at
   the robot: weigh it and measure its centre of mass (along the axis, a
-  knife-edge balance), then write them in `sim/ratsim/config.py` (`MASS_KG`,
+  knife-edge balance), then write them in `software/ratatron/sim/config.py` (`MASS_KG`,
   `COM_MM`, now estimated: the fast curves depend on them) and check that
   2.6 fails in the simulator as on the robot. The viewer is untested (no
-  monitor in that session). 11-17: 525 real mazes (`sim/tools/batch.py`):
+  monitor in that session). 11-17: 525 real mazes (`ratatron sim batch`):
   searches 523/525 (2 unreachable goals), races 2.4 fail 13.6 % and 2.6
   20 %, almost all touching in curves. Causes found: the centring's
   heading offset kept through a curve (a curve begun mid-correction turns
   wide; chained curves turn it into an along-track error), and the
   centring turning in place while braking (the goal reached 11 deg off).
   Branch `sim-steer-ds`: the offset clamped to 2 deg at each curve, 2.4
-  fails 8 %, 2.6 17.5 % (simulator only). Curves (`sim/tools/curves.py`,
+  fails 8 %, 2.6 17.5 % (simulator only). Curves (`ratatron sim curves`,
   mazes spiral, stairs): single curves clean up to 480; chains of curves
   drift sideways every curve with no feedback (stairs: 2.6 crashes at
   the 11th). Prototype C (same branch): routes with 3+ chained curves at
@@ -78,7 +78,7 @@ commit when done. Details go in the docs it points to, not here.
   its own speed): 2.4 fails 7.5 %, 2.6 10.1 %, 2.6 median +0.5 s (all
   curves at 400: 7.4 %, +1.25 s); the planner keeps its costs (--costs:
   no pair better by more than 0.3 %).
-  The real CAL RUN recordings of 09-26 (`sim/tools/real_ir_check.py`,
+  The real CAL RUN recordings of 09-26 (`ratatron sim real-ir`,
   layouts C and E): readings off the model by 5-15 mm (MAD), biases up
   to 45 mm, but the trajectory is dead reckoning and the layout guessed
   by the time: not conclusive. Next at the robot (~10 min): in a corner
@@ -116,7 +116,7 @@ commit when done. Details go in the docs it points to, not here.
   (x3) and 2.5 (x2) clean; races read only (a wall on the route:
   `BLOCKED`, map and flash untouched); sides with `CONT OFF` right; the
   one-sensor front `?`; the follower left the map alone. Battery ~5 %
-  under 10-08: `pace=90-95%` at 900. `bt_logger.py` no longer needs
+  under 10-08: `pace=90-95%` at 900. `ratatron connect` no longer needs
   `/dev/rfcomm0` (an RFCOMM socket, no root).
 
 - 2026-11-11 Lighting check (issue 21; `docs/lighting.md`): `CHECK`
@@ -137,7 +137,7 @@ commit when done. Details go in the docs it points to, not here.
 - 2026-10-06 Review of 09-30 (issue 15): (a) map repairs only at rest, their
   first pass keeping the robot's cell's walls (test_repair_at_rest), and (b)
   the shorter STATUS "flash:" line, in the firmware since the 10-05 flash;
-  calib_analyze.py unwraps its int16 columns (long CAL RUN recordings); the
+  software/ratatron/calib/analyze.py unwraps its int16 columns (long CAL RUN recordings); the
   README's CAL table rewritten. Ideas left for the review's plan (issue 19):
   cap the race return's curve speed, a SysTick stop if the following error
   runs away while the main loop blocks, measure the SysTick load.
@@ -156,7 +156,7 @@ commit when done. Details go in the docs it points to, not here.
   flash -544 B; next flash, keeps map and parameters). `robot_config.h`
   one line per constant (9c0ff65: 358 -> 157 lines, firmware identical
   but the build time), measurements in `docs/design.md`; the rule for
-  new knobs in AGENTS.md. `CURVE_PRE`/`CURVE_POST` stay: `calib_analyze.py`
+  new knobs in AGENTS.md. `CURVE_PRE`/`CURVE_POST` stay: `software/ratatron/calib/analyze.py`
   suggests them after `CAL CURVE` (a new floor).
 
 - 2026-09-27 Centring on straights (issue 14, layout I): no weave at
@@ -183,7 +183,7 @@ commit when done. Details go in the docs it points to, not here.
   restart cleared it (`docs/faults/freezes.md`, n=2).
 
 - 2026-09-27 Side-sensor calibration (issue 6, roadmap): no flash needed.
-  `calib_analyze.py` now fits rounds of `CAL NOISE` + `CAL TURN 1` x4 (the
+  `software/ratatron/calib/analyze.py` now fits rounds of `CAL NOISE` + `CAL TURN 1` x4 (the
   fronts facing the side walls measure the offset): slopes SL 0.95, SR 0.99,
   centred 88.1/75.3 vs 89/76 in firmware (0.1 mm of centring), kept. The
   180 deg pair needs the robot centred front to back (warns now).

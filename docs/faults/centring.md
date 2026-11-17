@@ -79,7 +79,7 @@ the firmware of the time (KP 0.5, KI 20, observer 40 mm, `STEER_MAX_DEG` 15,
 Layout I (`docs/mazes.md`), row 0 (4 cells, 540 mm between the corner cells'
 centres; the corner cells have one side wall), `CAL STRAIGHT 3 <mm/s>`, KP
 0.5, KI 20; recordings in `software/calib_data/2026-10-05_*_straight.csv`,
-summarised with `software/calib_analyze.py` (error every 45 mm, positive = left
+summarised with `software/ratatron/calib/analyze.py` (error every 45 mm, positive = left
 of the centre line, as the side IR read it: ~1 mm per deg of yaw too, the
 sensors are at the nose).
 

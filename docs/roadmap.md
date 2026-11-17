@@ -50,7 +50,7 @@ In order. The first two are worth more than any new code.
    - the heading over long straights and many turns (no gyro): `LOG 2`,
      the `err=` of every stop.
 3. **Record every competition run.** The race 2.4 crash at OSHWDEM
-   (issue 17) has no log, so it cannot be explained. `bt_logger.py`
+   (issue 17) has no log, so it cannot be explained. `ratatron connect`
    running and `LOG 2` at every run; a crash with a log is a fix.
 4. **The light.** The IR have no ambient subtraction and the hardware is
    fixed: ~200 counts of extra light make an open right side a wall.
@@ -78,7 +78,7 @@ main loop blocks (never seen), a lock on the map (the test covers it).
 
 Removed on 11-11: the races' exploring and saving (-170 B), `CHECK`
 (103 lines, -1.7 KB), the pre-speed-control analyses of
-`calib_analyze.py` (127 lines), the Spanish left. What is left to
+`software/ratatron/calib/analyze.py` (127 lines), the Spanish left. What is left to
 remove, each with what decides it:
 
 1. **One way to search.** There are two: straight legs decided on the

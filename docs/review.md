@@ -148,7 +148,7 @@ Items 1-6 done 11-11 (flash -24 B: `competition` 53984 B, `practice`
 
 ### Still to review
 
-`software/robot_monitor.py` and `software/calib_analyze.py` (structure only so
+`software/ratatron/monitor/monitor.py` and `software/ratatron/calib/analyze.py` (structure only so
 far), `firmware/test/host/sim.c`, most of `test_main.c`, `docs/lighting.md`,
 `docs/mazes.md`, `docs/faults/freezes.md`, `docs/faults/oshwdem2026.md`.
 
@@ -191,7 +191,7 @@ far), `firmware/test/host/sim.c`, most of `test_main.c`, `docs/lighting.md`,
    CPU while moving) is already inside the decisions' measured times.
    Closed, nothing changed.
 5. `CURVE_PRE`, `CURVE_POST` (0) and `CURVE_ANGLE` (90) still sit at their
-   neutral values (kept 09-30 for `calib_analyze.py`'s suggestions): keep
+   neutral values (kept 09-30 for `software/ratatron/calib/analyze.py`'s suggestions): keep
    them? The user, 11-16: `CURVE_PRE`/`CURVE_POST` deleted (flash -0.3 KB
    in `practice`); `CURVE_ANGLE` stays, the curve's angle.
 6. The flash stress tools of the virtual env (`TUNE STRESS`, `REVERSAL`,
@@ -200,7 +200,7 @@ far), `firmware/test/host/sim.c`, most of `test_main.c`, `docs/lighting.md`,
 
 ## Audit of 2026-11-11
 
-The user asked for an audit of `firmware/src/` and `software/robot_monitor.py`: bugs,
+The user asked for an audit of `firmware/src/` and `software/ratatron/monitor/monitor.py`: bugs,
 simplification and efficiency, ranked, each with its evidence; nothing is
 fixed until the user picks. It goes in small steps, each written here
 before stopping (the user's rule, 11-11). Line numbers are those of
@@ -217,7 +217,7 @@ decision 5144 pops. Sizes: `practice` RAM 84.4 % (17288 B), flash 93.9 %
 ### Step 1 (11-11): everything read once; the races write the map
 
 Read in full: every module of `firmware/src/` but the vendor files, `sim.c`,
-`robot_monitor.py`. Not yet: `calib_analyze.py`, `control_sim.c`, most of
+`the monitor (software/ratatron/monitor/monitor.py)`. Not yet: `software/ratatron/calib/analyze.py`, `control_sim.c`, most of
 `test_main.c`. "Measured" below: reproduced in the simulator or found in a
 robot log; "read": from the code alone.
 
@@ -451,11 +451,11 @@ Step 2 done 11-11 (above).
 Second pass over `commands.c` and `main.c` done 11-11: nothing found
 (`ERASE` with a full store compacts first; `PAUSE` with no run is
 cleared at the next start). The Python tools: `pyflakes` clean, 35 tests
-OK; `robot_monitor.py` and `calib_analyze.py` not read line by line.
+OK; `the monitor (software/ratatron/monitor/monitor.py)` and `software/ratatron/calib/analyze.py` not read line by line.
 
-The Python tools read in full 11-11 (`robot_monitor.py` but its drawing
-code, `calib_analyze.py`):
-- `calib_analyze.py` stopped with an `IndexError` on a recording with a
+The Python tools read in full 11-11 (`the monitor (software/ratatron/monitor/monitor.py)` but its drawing
+code, `software/ratatron/calib/analyze.py`):
+- `software/ratatron/calib/analyze.py` stopped with an `IndexError` on a recording with a
   row cut on the radio link (two of the 575 have one: 09-25 17:59 and
   10-08 20:09), so a report over the whole folder gave nothing. Damaged
   rows are now left out and counted in the report.
@@ -466,7 +466,7 @@ code, `calib_analyze.py`):
 - `test_calib_analyze.py` checked that the report did not say "no
   coinciden", the Spanish of a message that now reads "they disagree":
   it could never fail. Fixed.
-- Three Spanish strings in each tool. `robot_monitor.py`: nothing else
+- Three Spanish strings in each tool. `the monitor (software/ratatron/monitor/monitor.py)`: nothing else
   (the planner port is the transcript tests' business).
 Tools tests: 34 OK.
 

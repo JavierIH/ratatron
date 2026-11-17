@@ -14,12 +14,13 @@
   `lighting.md` (the venue's light on the IR: the manual check),
   `faults/` (investigations: `freezes.md`, `oshwdem2026.md`, `centring.md`).
   Read only what the issue needs; keep this file to rules and commands.
-- The robot over Bluetooth: `python3 software/bt_logger.py &` (holds
-  `/dev/rfcomm0`, or without it an RFCOMM socket, no root; logs to
-  `software/logs/`, saves `@D` dumps) and
-  `software/robot.sh [-w regex] [-t s] "CMD" ...`. Only one program may hold
-  the port (close `robot_monitor.py` first). Keep outputs short: grep the
-  lines that matter, summarise recordings with `software/calib_analyze.py`.
+- Tools: `software/install.sh` once, then `ratatron help` (reference:
+  `docs/tools.md`). The robot over Bluetooth: `ratatron connect &` (holds
+  `/dev/rfcomm0`, or without it an RFCOMM socket, no root; records to
+  `software/logs/`, saves `@D` dumps, shares the link on 127.0.0.1:7770)
+  and `ratatron send [-w regex] [-t s] "CMD" ...`; `ratatron monitor`
+  attaches to the same link. Keep outputs short: grep the lines that
+  matter, summarise recordings with `ratatron calib`.
 - The session logs (`software/logs/`) are the only record of the robot's
   runs: commit them after every robot session (the repo is public: check
   them for personal data first, e.g. home paths).
@@ -28,9 +29,10 @@
 One repo for the whole robot (since 2026-11-16; before, the firmware was
 `rat_sw` and this repo held only the hardware): `electronics/` (KiCad),
 `mechanics/` (FreeCAD, STL), `firmware/` (PlatformIO project: `src/`,
-`lib/`, `test/host/`), `software/` (PC tools, session logs, calibration
-recordings), `sim/` (MuJoCo simulator: the firmware on a simulated chip
-driving the CAD robot in a 16x16 maze, `sim/README.md`), `docs/`. A file's history before the move: `git log --follow`.
+`lib/`, `test/host/`), `software/` (the `ratatron` command: `ratatron/`
+with link, monitor, calib and sim, the MuJoCo simulator running the
+firmware on a simulated chip, `docs/simulator.md`; session logs,
+calibration recordings), `docs/`. A file's history before the move: `git log --follow`.
 
 ## Project objective
 "rat": micromouse firmware for an STM32F103 robot. It explores an
@@ -88,7 +90,8 @@ Goal configuration:
   `GPIO_NOPULL` with external resistors, debounced in SysTick (20 ms) because
   motor PWM noise can glitch them.
 - HC-05 Bluetooth on USART3 (9600 baud), `/dev/rfcomm0` on the PC (RFCOMM
-  channel 1, see `software/rfcomm_reconnect.sh`).
+  channel 1: `ratatron connect` reaches it directly, or `sudo rfcomm bind 0
+  20:13:09:11:04:32 1`).
 - `MOTORS_ENABLED` in `firmware/src/motor.h` is a hard kill-switch (0 = bridge never
   driven, for bench testing on USB power). Currently 1.
 
@@ -101,7 +104,7 @@ Environments in `firmware/platformio.ini` (`default_envs = competition`):
 - `dev`: `-DDEV_TOOLS=1`, the competition goal with the tools (tests on a
   large stretch; same saved record as `competition`).
 - `uart_test`, `diag_test`: hardware smoke tests (UART loopback; LED + IR +
-  encoder panel for `software/dashboard.py`). They exclude the app modules
+  encoder panel for `ratatron dashboard`). They exclude the app modules
   (`[common] app_sources`).
 - `virtual`: the robot firmware on the real chip with
   `motion.c`/`control.c`/`path.c` replaced by `firmware/src/test_virtual.c`, which
@@ -136,12 +139,15 @@ root; everything else from the root):
   (the robot prints the worst one's time and pops after a run);
   `--mazefile <files>` runs the whole cycle on real competition mazes
   (text files of github.com/micromouseonline/mazefiles, cloned outside the
-  repo: 520 classic 16x16). `software/plan_cycles.py` runs the firmware ELF's
+  repo: 520 classic 16x16). `ratatron cycles` runs the firmware ELF's
   planner on an emulated M3 (unicorn): cycles per pop without the robot.
-- `python3 -m unittest discover -s software -p 'test_*.py'`: monitor and
-  calibration analysis tests. They replay `--transcript` output, so they also
-  check that the monitor's planner makes the same decisions as the firmware.
-- CI (`.github/workflows/ci.yml`) builds all envs and runs both test suites.
+- `software/tests/` (`python3 -m unittest discover -s software/tests`):
+  monitor and calibration analysis tests. They replay `--transcript` output,
+  so they also check that the monitor's planner makes the same decisions as
+  the firmware. `ratatron test [--sim]` runs everything (host tests, small
+  planner queue, these, a simulator search); `ratatron flash ENV` flashes.
+- CI (`.github/workflows/ci.yml`) builds all envs, runs the test suites
+  and a search in the simulator.
 
 **Flashing quirk**: the ST-Link V2 clone has old firmware that only supports
 the deprecated HLA transport. `upload_protocol = custom` calls openocd with
@@ -215,7 +221,7 @@ Strategy code is pure C with no HAL, so the same files run on the PC tests.
   against simulated motors (first order, friction, stiction, dead time),
   quantised encoders, delayed side IR and the chassis' stick-slip in yaw
   (speed-control tests).
-- `software/robot_monitor.py`: live maze monitor + console (no curses: escape
+- `software/ratatron/monitor/monitor.py` (`ratatron monitor`): live maze monitor + console (no curses: escape
   codes in 24-bit colour, raw keys). Rebuilds the map from the telemetry,
   recomputes the route with a Python port of the planner (costs read from
   `robot_config.h`), paints the maze as pixels (`MazePainter`: sextants,
@@ -225,10 +231,11 @@ Strategy code is pure C with no HAL, so the same files run on the PC tests.
   trail, the run's clock, the banners. Records sessions
   to `software/logs/`, replays them (`--replay`), saves `@D` dumps as CSV in
   `software/calib_data/` (`/note` appends measurements).
-- `software/calib_analyze.py`: reports and suggested constants from those CSVs;
+- `software/ratatron/calib/analyze.py` (`ratatron calib`): reports and suggested constants from those CSVs;
   `--chain` follows the encoder heading against the walls over a session;
   `--delay` measures the IR delays (turns, wall approaches).
-- `software/dashboard.py`: live panel for `diag_test`.
+- `ratatron dashboard`: live panel for `diag_test`.
+- `software/ratatron/sim/` (`ratatron sim`): the MuJoCo simulator, `docs/simulator.md`.
 
 ## Operating the robot
 - After boot the LEDs sweep 1 -> 6 -> 1 until SELECT picks mode 1 (START
@@ -317,7 +324,7 @@ search leg; the dump comes when the run ends).
   stay trusted. `FRONT_SQUARE_OFFSET_MM` (FL-FR when square to a wall, -15:
   median of 44 IR stops) makes the yaw rule symmetric and is the target of the
   front squaring. Confirm it with the robot centred and squared by hand to a
-  wall: `CAL NOISE`, then `calib_analyze.py` prints the value.
+  wall: `CAL NOISE`, then `ratatron calib` prints the value.
 - Speed control, sensing, curves and search legs: the reasons and the
   measurements are in `docs/design.md`; read the section before changing
   that code. The rules:
@@ -383,7 +390,7 @@ search leg; the dump comes when the run ends).
 - Telemetry is sent only between actions, never from a control loop. Any map
   change the per-cell `@C` lines do not cover must be followed by
   `telemetry_map()` (see the map repair in `plan_explore()`).
-- `software/robot_monitor.py` ports `maze_plan_to/from`, `maze_best_action`
+- The monitor (`software/ratatron/monitor/monitor.py`) ports `maze_plan_to/from`, `maze_best_action`
   (same tie order), `maze_route()` with the route text of the log ("2R1L3":
   cells, then a curve right/left in the last of them) and the OPTIM
   candidates. Change both together; the transcript tests fail if they

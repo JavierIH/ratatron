@@ -3,6 +3,9 @@
 | File | What it holds |
 |---|---|
 | [ISSUES.md](ISSUES.md) | open issues (state and next step) and the closed ones; start here |
+| [usage.md](usage.md) | using the robot: buttons, modes, LEDs, the Bluetooth console, the calibration tests |
+| [tools.md](tools.md) | the `ratatron` commands, the live monitor, building, flashing and testing |
+| [simulator.md](simulator.md) | the robot in MuJoCo with its real firmware: use, how it works, what is assumed |
 | [design.md](design.md) | how and why the firmware works as it does: speed control, IR, centring, curves, search legs, planner costs, health checks, clock, telemetry format |
 | [measurements.md](measurements.md) | the numbers behind the constants in `firmware/src/robot_config.h` |
 | [testing.md](testing.md) | what was validated on the robot, getting ready for a 16x16 without one, the competition checklist |

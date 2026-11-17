@@ -8,7 +8,7 @@ behind the constants: docs/measurements.md. AGENTS.md has the rules.
   `TACCEL`, cruises, arrives at rest exactly on its target) that two position
   loops follow in SysTick, forward (mm) and rotation (deg), with a
   feedforward from the motor model (`MOTOR_KV_L/R`, `MOTOR_TAU_S`,
-  `MOTOR_KS_PWM`, fitted from `CAL STEP` recordings by `calib_analyze.py`).
+  `MOTOR_KS_PWM`, fitted from `CAL STEP` recordings by `software/ratatron/calib/analyze.py`).
   The robot stops where it is told, so there are no coasting calibrations.
   Position loops, not speed loops: one encoder tick per ms is 111 mm/s of
   quantisation. Out of PWM the rotation keeps its share and the forward
@@ -109,7 +109,7 @@ behind the constants: docs/measurements.md. AGENTS.md has the rules.
   readings taken on a straight.
 - Tuning the curves: `CAL CURVE [+-1] [mm/s]` from a cell centre (one cell, a
   curve, one cell; best with side walls and a front wall in the last cell),
-  then `calib_analyze.py` reports where the side walls put the robot after
+  then `software/ratatron/calib/analyze.py` reports where the side walls put the robot after
   the curve (wide = it started late) and where the front wall moved the
   stop, and suggests `CURVE_ANGLE` (FL - FR at the end; noisy, average
   several). `CURVE_PRE`/`CURVE_POST` (mm more straight before and after a
@@ -142,7 +142,7 @@ behind the constants: docs/measurements.md. AGENTS.md has the rules.
   error becomes a longitudinal one at the next curve and back, so small
   per-curve changes add up: a kinematic model gives +24 mm for `CURVE_PRE
   -8` alone (measured +23) and ~10 mm per degree of angle error per curve.
-  `calib_analyze.py` now fits, per straight, the encoder heading that runs
+  `software/ratatron/calib/analyze.py` now fits, per straight, the encoder heading that runs
   parallel to the walls: on E the last straight's is ~+3.5 deg (1.7..6.3)
   beyond the first's at both 300 and 480 (3 right and 3 left curves: left
   ones turn ~0.6 deg more each?), so the speed-dependent +20 mm is a
@@ -173,7 +173,7 @@ behind the constants: docs/measurements.md. AGENTS.md has the rules.
   physical. Without centring the yaw carries from move to move: the third
   loop started 3 deg yawed (TURN 2 leaves ~4.5) and hit the island at the
   end of its first curve (300 mm/s).
-  Offline, with `calib_analyze.py --chain` (the encoder heading summed over
+  Offline, with `software/ratatron/calib/analyze.py --chain` (the encoder heading summed over
   the session against the walls', per wall stretch; it agrees with FL-FR at
   every border stop within ~1.3 deg): the centring's rotations are real
   (inside a move the side walls see at least ~75 % of them). What does not
@@ -291,7 +291,7 @@ behind the constants: docs/measurements.md. AGENTS.md has the rules.
 
 ## Telemetry (`telemetry.c`)
 
-Machine-readable lines for software/robot_monitor.py (live maze view). All
+Machine-readable lines for software/ratatron/monitor/monitor.py (live maze view). All
 start with '@', are at most 21 bytes and are only sent between actions,
 never from a control loop. TELEM OFF silences them. `@D` lines are
 calibration dumps (`calib.c`).

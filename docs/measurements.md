@@ -12,7 +12,7 @@ The numbers behind the constants that docs/design.md does not already give
   the position 50 ms earlier plus the reading matched it within 0.6 mm
   over a whole approach (`CAL STRAIGHT 3 400`). 22 since 10-08: 8
   approaches of `CAL STRAIGHT 3`, two at each of 100, 300, 600 and 900
-  mm/s (`calib_analyze.py --delay`), gave FL 16-24 / FR 24-32 ms at 600-900, the same ms at both
+  mm/s (`software/ratatron/calib/analyze.py --delay`), gave FL 16-24 / FR 24-32 ms at 600-900, the same ms at both
   speeds (a delay, not a slide or an offset; at 100-300 a 2 mm calibration
   error scatters them to 8-58); in-place turns 0-8 ms on all four. With
   `TUNE IR_DELAY 22` the stops read 92-93 (91.5-94.5 at 50) and the

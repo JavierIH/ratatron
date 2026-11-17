@@ -184,7 +184,7 @@ min more of search in them (the other 517 finish under 400). Set to 800
    (`host_tests --timing`), so a practice search measures it: the robot
    prints `decisions on the way: N, worst X us (P pops), late L` after
    the run. Cost a pop = X / P. Real mazes are worse than random ones: the
-   worst decision in the 520 pops 5144. `software/plan_cycles.py` (emulated
+   worst decision in the 520 pops 5144. `ratatron cycles` (emulated
    M3, a cycle model) gave 235 cycles a pop, ~17 ms for 5144: no margin.
    The planner's loop was rewritten (same results: transcripts and the 520
    mazes identical): 133 cycles a pop, ~9.5 ms + the rest of the decision.
@@ -311,7 +311,7 @@ The firmware pairs the front readings with where the robot was
 the search legs' front decisions, `SEARCH_LEG_SPEED_MAX`); the centring
 assumes nothing, and the simulator gives the side IR 8 ms
 (`SIDE_IR_DELAY_MS`). The only measurement behind the 50 is a front wall
-approached at 400 mm/s (docs/measurements.md). `software/calib_analyze.py
+approached at 400 mm/s (docs/measurements.md). `software/ratatron/calib/analyze.py
 --delay` measures every recording at hand (all of them up to 10-05):
 
 | Method | FL | FR | SL | SR |
@@ -343,7 +343,7 @@ On the robot (no flash needed; short batches for the battery):
    slide keeps the same mm, so its ms falls as 1/speed.
 3. **Slide** (only if 2 points at one): the 600 mm/s runs again with `ACCEL
    2000`; a slide shrinks with gentler braking, a delay does not.
-4. Then `python3 software/calib_analyze.py --delay software/calib_data/<new>*.csv`.
+4. Then `ratatron calib --delay software/calib_data/<new>*.csv`.
 
 If the front delay is not 50: try it live with `TUNE IR_DELAY <ms>` and
 check the stops on end walls (`end=IR`, FL/FR ~85/101 squared, err a few
