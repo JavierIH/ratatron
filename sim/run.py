@@ -10,7 +10,8 @@ Console: every line goes to the firmware as over Bluetooth (MODE 1, START, STOP,
     :reset              power cycle (map kept)   :erase-flash           power cycle with blank flash
     :speed f            real-time factor (0 = as fast as possible)       :quit
 Viewer keys: Page Up = SELECT, Page Down = START, End = back to the start cell.
-The monitor: --pty prints a port for `python3 software/robot_monitor.py --port <it>`.
+The monitor, as with the robot: `python3 software/robot_monitor.py --port sim/build/tty` (a pseudo-terminal the
+simulator opens; the monitor's console commands, SYNC, the map and the route all work through it).
 """
 import argparse
 import os
@@ -53,11 +54,13 @@ class Session:
         self.inbox.put(':eof')
 
     def pty_reader(self):
+        import select
         buf = b''
         while not self.quit:
+            select.select([self.pty_fd], [], [], 0.1)
             try:
                 chunk = os.read(self.pty_fd, 256)
-            except OSError:
+            except OSError:         # nothing yet, or no program on the other end
                 time.sleep(0.05)
                 continue
             buf += chunk
@@ -109,7 +112,7 @@ class Session:
         if not text:
             return
         if self.pty_fd is not None:
-            try:
+            try:        # non-blocking: with no monitor reading, what does not fit is lost (as over Bluetooth)
                 os.write(self.pty_fd, text.replace('\n', '\r\n').encode())
             except OSError:
                 pass
@@ -298,7 +301,9 @@ def main():
     p.add_argument('--telemetry', action='store_true', help='show the @ telemetry lines too')
     p.add_argument('--timestamps', action='store_true', help='simulated time before every line')
     p.add_argument('--log', help='append everything the firmware sends to this file')
-    p.add_argument('--pty', action='store_true', help='a pseudo-terminal for software/robot_monitor.py')
+    p.add_argument('--port', default=os.path.join(os.path.dirname(os.path.abspath(__file__)), 'build', 'tty'),
+                   help='the serial port the monitor opens (a link to a pseudo-terminal; default sim/build/tty)')
+    p.add_argument('--no-pty', action='store_true', help='no serial port for the monitor')
     p.add_argument('--poses', action='store_true', help='print the true pose at every firmware pose report')
     p.add_argument('--follow', action='store_true', help='the viewer camera follows the robot')
     p.add_argument('--record', metavar='MP4', help='headless: record a video (ffmpeg)')
@@ -310,13 +315,22 @@ def main():
     if args.save_maze:
         with open(args.save_maze, 'w') as f:
             f.write(s.maze.text())
-    if args.pty:
+    link = None
+    if not args.no_pty:
         import pty
         import tty
-        master, slave = pty.openpty()
+        master, slave = pty.openpty()       # the slave stays open here: the port survives monitors coming and going
         tty.setraw(slave)
+        os.set_blocking(master, False)
         s.pty_fd = master
-        print(f'## monitor: python3 software/robot_monitor.py --port {os.ttyname(slave)}', flush=True)
+        link = args.port
+        try:
+            os.remove(link)
+        except OSError:
+            pass
+        os.symlink(os.ttyname(slave), link)
+        print(f'## the robot\'s Bluetooth port: {os.path.relpath(link)}  '
+              f'(python3 software/robot_monitor.py --port {os.path.relpath(link)})', flush=True)
         threading.Thread(target=s.pty_reader, daemon=True).start()
     for c in args.cmd:
         s.inbox.put(c)
@@ -331,6 +345,11 @@ def main():
     print(f'## end: {s.robot.fw.time_ms() / 1000:.1f} s simulated, robot at x={x:.0f} y={y:.0f} mm heading {h:.1f} deg',
           flush=True)
     s.robot.fw.close()
+    if link:
+        try:
+            os.remove(link)
+        except OSError:
+            pass
 
 
 if __name__ == '__main__':

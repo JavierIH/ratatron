@@ -1,8 +1,8 @@
 # RATATRON in MuJoCo
 
 The robot's firmware (`firmware/src`, unchanged) driving the CAD robot in a 16x16 micromouse maze:
-black floor, white walls 50 mm high and 12 mm thick, red tops, 180 mm cells; 12 mm posts with a 4 x 4 mm slot
-in every face, the walls ending in a 4 x 4 mm tongue that fits it (an empty slot reads 4 mm deeper on the IR).
+black floor, white walls 50 mm high and 12 mm thick, red tops, 180 mm cells; 12 mm posts with a 3 x 3 mm slot
+in every face, the walls ending in a 3 x 3 mm tongue that fits it (an empty slot reads 3 mm deeper on the IR).
 
 ```
 python3 -m venv sim/.venv && sim/.venv/bin/pip install -r sim/requirements.txt
@@ -17,7 +17,8 @@ The library builds itself (`make -C sim/fw`, also `PRACTICE=1`) when a firmware 
 Console lines go to the firmware as over Bluetooth (`MODE 1`, `START`, `STOP`, `MAP`, `STATUS`, `CAL ...`);
 `:start` / `:select` press the buttons, `:place x y N`, `:reset`, `:erase-flash`, `:speed f`, `:wait-idle`
 (scripts), `:quit`. Viewer: Page Up = SELECT, Page Down = START, End = back to the start.
-`--pty` gives a port for `software/robot_monitor.py --port <it>`. `--poses` prints the true pose at every
+The monitor works as with the robot: `python3 software/robot_monitor.py --port sim/build/tty` (a link to a
+pseudo-terminal the simulator opens; `--no-pty` without it). `--poses` prints the true pose at every
 pose the firmware reports; "POSE LOST" whenever they disagree, "touches a wall" when the hull does.
 The flash (saved map) lives in `sim/build/flash.bin` between runs, as on the robot.
 
