@@ -22,6 +22,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - run: make -C firmware/test/host
+      - run: make -C firmware/test/host small-queue
       - run: python3 -m unittest discover -s software -p 'test_*.py'
 
   simulator:
