@@ -12,7 +12,7 @@ CC       ?= cc
 CFLAGS   := -std=c11 -O1 -g -Wall -Wextra -Wshadow -Werror -I$(SRC_DIR) -fsanitize=address,undefined -fno-omit-frame-pointer
 BUILD    := build
 
-.PHONY: all run clean
+.PHONY: all run small-queue clean
 all: run
 
 $(BUILD)/host_tests: $(FIRMWARE) $(HOST) sim.h control_sim.h $(wildcard $(SRC_DIR)/*.h)
@@ -21,6 +21,14 @@ $(BUILD)/host_tests: $(FIRMWARE) $(HOST) sim.h control_sim.h $(wildcard $(SRC_DI
 
 run: $(BUILD)/host_tests
 	./$(BUILD)/host_tests $(ARGS)
+
+# The planner with a 16-state queue: it overflows all the time, the tests check the states left out are planned.
+$(BUILD)/host_tests_q16: $(FIRMWARE) $(HOST) sim.h control_sim.h $(wildcard $(SRC_DIR)/*.h)
+	@mkdir -p $(BUILD)
+	$(CC) $(CFLAGS) -DPLAN_QUEUE_LEN=16u -o $@ $(FIRMWARE) $(HOST) -lm
+
+small-queue: $(BUILD)/host_tests_q16
+	./$(BUILD)/host_tests_q16
 
 clean:
 	rm -rf $(BUILD)

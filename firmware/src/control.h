@@ -92,7 +92,7 @@ typedef struct {
     uint8_t average_steps;  // side readings averaged over this many steps (<= STEER_AVERAGE_MAX)
 } steer_config_t;
 
-#define STEER_AVERAGE_MAX 40
+#define STEER_AVERAGE_MAX 16    // STEER_AVERAGE_MS; more is never asked
 
 typedef struct {
     float heading;          // heading offset asked for, deg (> 0: to the right)

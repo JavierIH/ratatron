@@ -124,9 +124,17 @@ void maze_goal_cells(cellset_t *out){
 // ---- Planner ------------------------------------------------------------------------
 // SPFA over locals (it is the legs' decision time, ~5000 pops at worst); each state queued at most once.
 
-_Static_assert((MAZE_STATES & (MAZE_STATES - 1)) == 0, "the queue ring wraps with a mask");
+// The ring holds PLAN_QUEUE_LEN states at once (the most seen: 384 over 520 real mazes, of 1024 states): a state
+// whose cost drops while it is full is marked left out, and queued once the ring has room (it ends: costs only drop).
+#ifndef PLAN_QUEUE_LEN
+#define PLAN_QUEUE_LEN 512u
+#endif
+_Static_assert((PLAN_QUEUE_LEN & (PLAN_QUEUE_LEN - 1u)) == 0 && PLAN_QUEUE_LEN <= MAZE_STATES,
+               "the queue ring wraps with a mask");
 
-static uint16_t queue[MAZE_STATES];
+static uint16_t queue[PLAN_QUEUE_LEN];
+static uint32_t left_out[MAZE_STATES / 32];  // cost dropped while the ring was full: to queue later
+static uint8_t any_left_out;
 static uint32_t queued[MAZE_STATES / 32];
 static uint16_t q_count;    // seeded by the callers, then the loop's
 static uint32_t pops;
@@ -136,10 +144,17 @@ static const int16_t STEP[4] = {MAZE_SIZE * 4, 4, -MAZE_SIZE * 4, -4};
 
 static void queue_reset(void){
     q_count = 0;
+    any_left_out = 0;
     memset(queued, 0, sizeof(queued));
+    memset(left_out, 0, sizeof(left_out));
 }
 
 static void queue_push(uint16_t s){
+    if(q_count >= PLAN_QUEUE_LEN){
+        left_out[s >> 5] |= 1u << (s & 31u);
+        any_left_out = 1;
+        return;
+    }
     queued[s >> 5] |= 1u << (s & 31u);
     queue[q_count++] = s;
 }
@@ -171,8 +186,13 @@ static inline __attribute__((always_inline)) void relax(uint16_t *cost, uint32_t
     cost[t] = (uint16_t)c;
     const uint32_t bit = 1u << (t & 31u);
     if(queued[t >> 5] & bit) return;
+    if(*count >= PLAN_QUEUE_LEN){
+        left_out[t >> 5] |= bit;
+        any_left_out = 1;
+        return;
+    }
     queued[t >> 5] |= bit;
-    queue[(head + *count) & (MAZE_STATES - 1u)] = (uint16_t)t;
+    queue[(head + *count) & (PLAN_QUEUE_LEN - 1u)] = (uint16_t)t;
     (*count)++;
 }
 
@@ -181,9 +201,28 @@ static void spfa(uint16_t *cost, plan_mode_t mode, plan_costs_t costs, uint8_t b
     const int8_t limit = mode == PLAN_VERIFIED ? -EV_VERIFIED : 0;
     const uint32_t back = backward ? 2u : 0u, cell = costs.cell, turn = costs.turn;
     uint32_t head = 0, count = q_count, popped = 0;
-    while(count){
+    for(;;){
+        if(!count){
+            if(!any_left_out) break;
+            // The ring was full at some point: queue the states left out, as many as fit.
+            any_left_out = 0;
+            head = 0;
+            for(uint32_t w = 0; w < MAZE_STATES / 32; w++){
+                while(left_out[w]){
+                    if(count == PLAN_QUEUE_LEN){
+                        any_left_out = 1;   // the rest after these
+                        break;
+                    }
+                    const uint32_t b = (uint32_t)__builtin_ctz(left_out[w]);
+                    left_out[w] &= left_out[w] - 1u;
+                    queued[w] |= 1u << b;
+                    queue[count++] = (uint16_t)(w * 32u + b);
+                }
+            }
+            continue;
+        }
         const uint32_t s = queue[head];
-        head = (head + 1u) & (MAZE_STATES - 1u);
+        head = (head + 1u) & (PLAN_QUEUE_LEN - 1u);
         count--;
         popped++;
         queued[s >> 5] &= ~(1u << (s & 31u));

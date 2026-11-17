@@ -151,8 +151,8 @@ void clock_failure_hook(void){
 }
 static int32_t tick_l, tick_r;      // encoder totals at the last SysTick
 // The forward position of the last TRAIL_LEN ms: the IR report the past (IR_DELAY_MS).
-#define TRAIL_LEN 64
-#define IR_DELAY_MAX 60     // TUNE limit
+#define TRAIL_LEN 32
+#define IR_DELAY_MAX 30     // TUNE limit (measured: 22)
 _Static_assert(IR_DELAY_MAX < TRAIL_LEN, "IR delay too long");
 static float trail[TRAIL_LEN];
 static volatile uint8_t trail_slot;
