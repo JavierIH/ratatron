@@ -6,24 +6,30 @@ commit when done. Details go in the docs it points to, not here.
 
 ## Next session
 
-- The robot runs what `develop` has since the flash of 11-13
-  (`practice`), validated that day (`docs/testing.md`, session of 11-13):
-  nothing waits for the robot. For a competition flash `competition`.
-- Next by `docs/roadmap.md`: the large maze (issue 11, deferred until a
-  long stretch is available), then one way to
-  search and the legs at 600. Without the robot: nothing pending.
-- The competition gives 7 minutes for the search and the races
-  together (the user, 11-13): the OPTIM phase stays as it is, no
-  setting (`docs/roadmap.md`, efficiency 1: 16 of 523 real mazes leave
-  under 2 minutes for the races, 2 none).
-- The monitor's new look (24-bit colour, the maze in sextant pixels, the
-  run's clock; no curses) is in `develop` since 11-16: checked with
-  replays and the pty tests only, not yet with the live robot. If the
-  maze shows as boxes in a terminal: `--pixels half`.
+At the robot (`ratatron flash practice`; everything below is in `develop`):
+- Validate the firmware of 11-17, so far only in the simulator: the
+  curves keep at most 2 deg of the centring's offset, chains of 3+
+  curves at 400, the arrival check of the races (walls vs the map), the
+  RAM savings (`STATUS`: the stack never used, ~2.7 KB expected). A
+  search and races 2.4-2.6 on a practice layout with chained curves (E).
+- Measure for the simulator (issue 24), then write them in
+  `software/ratatron/sim/config.py`: the mass (a scale), the centre of
+  mass along the robot (a knife-edge balance; its height if possible),
+  the skids' gap to the floor (feeler gauge). Then check that race 2.6
+  fails in the simulator as on the robot.
+- The IR at an angle (issue 24, ~10 min): in a corner cell, the robot by
+  hand at 0, 15, 30, 45, 60, 75, 90 deg about the centre, `CAL NOISE` at
+  each; `ratatron sim real-ir` style comparison with the model.
+- The new tools with the real link: `ratatron connect` (rfcomm0 and the
+  direct RFCOMM socket), `ratatron monitor` and `ratatron send` attached
+  at once; the monitor's new look live.
 
-- 11-17: `develop` has, not yet on the robot: the curves keep at most
-  2 deg of the centring's offset, chains of 3+ curves at 400, the RAM
-  savings (planner queue 512). Check them at the next flash (issue 24).
+Without the robot:
+- The 3D viewer (`ratatron sim` with a screen) is untested.
+- The competition gives 7 minutes for the search and the races
+  together (the user, 11-13): the OPTIM phase stays as it is.
+- Next by `docs/roadmap.md`: the large maze (issue 11, deferred until a
+  long stretch is available), then one way to search and the legs at 600.
 
 ## Open
 
