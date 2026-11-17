@@ -16,7 +16,9 @@ ratatron connect --sim               # then ratatron monitor / ratatron send, as
   Page Down = START, End = back to the start. The viewer needs a screen: else `--headless` (`--record out.mp4`).
 - `--poses` prints the true pose at every pose the firmware reports: "POSE LOST" when they differ, "touches a
   wall" when the hull does. The flash (saved map) persists in `software/ratatron/sim/build/flash.bin`.
-- Studies: `ratatron sim batch` (many mazes; `--maps` reuses saved searches for race-only changes),
+- `--slip DEG` (also in `batch`): in the first 100 mm of every move from rest one encoder counts DEG of encoder
+  heading (+ left) more than its wheel rolls; `--slip 6` gives the robot's run-up slip at `ACCEL` 3000 (11-17).
+- Studies: `ratatron sim batch` (many mazes; `--maps` reuses saved searches for race-only changes, `--practice`),
   `curves` (every curve against the cells), `failures`, `mapdiff`, `ir-info` / `real-ir` (the IR in curves),
   `demo` (a video of the simulator and the monitor together).
 

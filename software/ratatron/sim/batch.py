@@ -17,12 +17,12 @@ from concurrent.futures import ThreadPoolExecutor
 from .. import paths
 
 
-def run_one(maze, out, races, max_s, maps=None):
+def run_one(maze, out, races, max_s, maps=None, extra=()):
     name = os.path.splitext(os.path.basename(maze))[0]
     log = os.path.join(out, name + '.log')
     flash = os.path.join(out, name + '.bin')
     cmd = [sys.executable, '-m', 'ratatron', 'sim', '--headless', '--speed', '0', '--no-pty', '--flash', flash,
-           '--maze', maze, '--timestamps', '--max-s', str(max_s), '--until-idle']
+           '--maze', maze, '--timestamps', '--max-s', str(max_s), '--until-idle', *extra]
     if maps:        # the map a search saved before: only the races (for changes the search does not use)
         shutil.copy(os.path.join(maps, name + '.bin'), flash)
         steps = []
@@ -77,13 +77,16 @@ def main():
     p.add_argument('--races', default='2 4,2 6', help='race menu entries after the search, comma separated')
     p.add_argument('--max-s', type=int, default=1500, help='simulated seconds per maze at most')
     p.add_argument('--maps', help='a batch dir whose saved maps (*.bin) replace the search')
+    p.add_argument('--slip', type=float, default=0.0, help='encoder slip per move from rest (deg, see sim --slip)')
+    p.add_argument('--practice', action='store_true', help='the practice build (goal 3,2)')
     a = p.parse_args()
     os.makedirs(a.out, exist_ok=True)
-    subprocess.run(['make', '-s', '-C', os.path.join(paths.SIM, 'fw')], check=True)
+    subprocess.run(['make', '-s', '-C', os.path.join(paths.SIM, 'fw')] + (['PRACTICE=1'] if a.practice else []), check=True)
+    extra = (['--slip', str(a.slip)] if a.slip else []) + (['--practice'] if a.practice else [])
     races = [r.strip() for r in a.races.split(',') if r.strip()]
     rows, t0 = [], time.monotonic()
     with ThreadPoolExecutor(a.workers) as ex:
-        futures = [ex.submit(run_one, m, a.out, races, a.max_s, a.maps) for m in a.mazes]
+        futures = [ex.submit(run_one, m, a.out, races, a.max_s, a.maps, extra) for m in a.mazes]
         for i, f in enumerate(futures, 1):
             try:
                 row = f.result()

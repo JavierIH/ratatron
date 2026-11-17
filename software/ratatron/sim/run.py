@@ -46,7 +46,7 @@ class Session:
         os.makedirs(os.path.dirname(args.flash), exist_ok=True)
         if args.erase_flash and os.path.exists(args.flash):
             os.remove(args.flash)
-        self.robot = Robot(self.maze, build(args.practice), args.flash, seed=args.seed)
+        self.robot = Robot(self.maze, build(args.practice), args.flash, seed=args.seed, slip_deg=args.slip)
         self.inbox = queue.Queue()
         self.speed = args.speed
         self.quit = False
@@ -303,6 +303,8 @@ def make_parser():
     p.add_argument('--seed', type=int, default=1, help='generated maze and sensor noise seed')
     p.add_argument('--loops', type=float, default=0.08, help='generated maze: share of walls removed (loops)')
     p.add_argument('--practice', action='store_true', help='the practice build (goal 3,2)')
+    p.add_argument('--slip', type=float, default=0.0,
+                   help='encoder slip: deg of encoder heading (+ left) in the first 100 mm of every move from rest')
     p.add_argument('--flash', default=os.path.join(paths.SIM_BUILD, 'flash.bin'),
                    help='the robot flash (saved map) between runs')
     p.add_argument('--erase-flash', action='store_true', help='start with blank flash (no saved map)')

@@ -27,11 +27,18 @@ IR_NOISE_MM = 0.8
 IR_FAR_MM = 300.0                   # nothing in the beam: the farthest reading (the cubic clamps it)
 IR_SPREAD_DEG = 2.5                 # three rays: the beam's spot (posts and wall ends read in between)
 BUTTON_MS = 80
+# Encoder slip (studies, --slip DEG): in the first SLIP_MM of every move from rest one encoder counts more than its
+# wheel rolls, DEG of encoder heading in all (+ left). +6: the robot's run-ups at ACCEL 3000 on 11-17 (ratatron calib's
+# "parallel to the walls at encoder heading" -5 to -6.5, + right there).
+SLIP_MM = 100.0
+SLIP_MM_PER_DEG = 2.0 * C.FW['TICKS_PER_TURN'] / 90.0 / TICKS_PER_MM   # wheel difference per deg of heading
+REST_MS = 20                        # both wheels still this long: the next move starts from rest
 
 
 class Robot:
-    def __init__(self, maze, lib_path, flash_file=None, seed=0, start=(0, 0, 'N')):
+    def __init__(self, maze, lib_path, flash_file=None, seed=0, start=(0, 0, 'N'), slip_deg=0.0):
         self.maze = maze
+        self.slip_deg = slip_deg
         self.model = mujoco.MjModel.from_xml_string(scene_xml(maze))
         self.data = mujoco.MjData(self.model)
         self.rng = random.Random(seed)
@@ -92,6 +99,7 @@ class Robot:
             self.fw.close()
         self.fw = Firmware(self.lib_path, self.flash_file, cause)
         self.enc_zero = {s: self.data.qpos[self.wheel_qpos[s]] for s in 'lr'}
+        self.slip = {'l': 0.0, 'r': 0.0, 'base': 0.0, 'given': 0.0, 'still': 0, 'last': None}
         self.tables = {}
         counts = np.arange(4096, dtype=np.float32)
         for name, (idx, _, _, _) in C.IR_SENSORS.items():
@@ -158,7 +166,26 @@ class Robot:
         q = self.data.qpos
         mm_l = (q[self.wheel_qpos['l']] - self.enc_zero['l']) * self.r / MM
         mm_r = (q[self.wheel_qpos['r']] - self.enc_zero['r']) * self.r / MM
+        if self.slip_deg:
+            mm_l, mm_r = self._slip(mm_l, mm_r)
         return math.floor(mm_l * TICKS_PER_MM / (1.0 + WHEEL_DIFF)), math.floor(mm_r * TICKS_PER_MM)
+
+    def _slip(self, mm_l, mm_r):
+        """The wheels' rolled mm plus what --slip adds: a share of the whole as the move's first SLIP_MM go by."""
+        s = self.slip
+        mid = 0.5 * (mm_l + mm_r)
+        if s['last'] is not None and abs(mm_l - s['last'][0]) + abs(mm_r - s['last'][1]) < 0.002:
+            s['still'] += 1
+            if s['still'] >= REST_MS:
+                s['base'], s['given'] = mid, 0.0
+        else:
+            s['still'] = 0
+        s['last'] = (mm_l, mm_r)
+        want = abs(self.slip_deg) * SLIP_MM_PER_DEG * min(max((mid - s['base']) / SLIP_MM, 0.0), 1.0)
+        if want > s['given']:
+            s['l' if self.slip_deg < 0 else 'r'] += want - s['given']
+            s['given'] = want
+        return mm_l + s['l'], mm_r + s['r']
 
     # ---- buttons, console -------------------------------------------------------------------------------------------
     def press(self, button):
