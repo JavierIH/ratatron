@@ -85,7 +85,8 @@ Goal configuration:
   to 32-bit odometry every 1 ms in `encoder_tick()`).
 - 4 IR distance sensors (FL/FR/SL/SR) on ADC1, scanned continuously by circular
   DMA into a 16x oversampling buffer; `ir_mm()` applies a cubic calibration
-  (float, Horner). Raw calibration tables in `firmware/src/calib.txt`.
+  (float, Horner). `firmware/src/calib.txt` is obsolete: ignore it (its tables are not
+  the cubics' data; kept for history).
 - The side sensors SL/SR are mounted at the nose, angled 15 deg forward (not
   perpendicular). Stopped too far forward or yawed, their beam leaves the cell
   by the post and reports a phantom side wall (yawed left: SR; right: SL).

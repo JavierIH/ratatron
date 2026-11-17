@@ -1,3 +1,7 @@
+OBSOLETE - IGNORE: early tables (raw ADC per mm, origin of the distance unknown) and code from the old firmware.
+The cubics in infrared.c (2024-10-16) were not fitted to these tables (they differ by up to 17 mm at 70-110 mm).
+Kept for history only (docs/measurements.md, IR calibration).
+
 DISTANCE        30,     35,     40,     45,     50,     55,     60,     65,     70,     75,     80,     85,     90,     95,     100,        105,        110,        115,        120,        125,        130,        135,        140,        145,        150,        155,        160,        165,        170,        175,        180
 SL              2200,   1955,   1730,   1550,   1360,   1250,   1160,   1100,   1020,   950,    900,    850,    810,    770,    720,        690,        670,        650,        620,        600,        575,        555,        530,        505,        483,        470,        460,
 SR              2120,   1830,   1590,   1410,   1245,   1110,   995,    900,    830,    765,    680,    640,    570,    525,    470,        425,        384,        375,        327,        304,        282,        255,        232,        210,        185,        165,        150,
