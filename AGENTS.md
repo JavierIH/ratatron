@@ -33,9 +33,11 @@ One repo for the whole robot (since 2026-11-16; before, the firmware was
 `rat_sw` and this repo held only the hardware): `electronics/` (KiCad),
 `mechanics/` (FreeCAD, STL), `firmware/` (PlatformIO project: `src/`,
 `lib/`, `test/host/`), `software/` (the `ratatron` command: `ratatron/`
-with link, monitor, calib and sim, the MuJoCo simulator running the
-firmware on a simulated chip, `docs/simulator.md`; session logs,
+with link, monitor and calib; session logs,
 calibration recordings), `docs/`. A file's history before the move: `git log --follow`.
+The MuJoCo simulator (the firmware on a simulated chip) moved to its own repository on
+2026-11-18: [ratasim](https://github.com/JavierIH/ratasim) (this repo as its submodule
+`external/ratatron`; `ratatron connect --sim` attaches to it).
 
 ## Project objective
 "rat": micromouse firmware for an STM32F103 robot. It explores an
@@ -239,7 +241,7 @@ Strategy code is pure C with no HAL, so the same files run on the PC tests.
   `--chain` follows the encoder heading against the walls over a session;
   `--delay` measures the IR delays (turns, wall approaches).
 - `ratatron dashboard`: live panel for `diag_test`.
-- `software/ratatron/sim/` (`ratatron sim`): the MuJoCo simulator, `docs/simulator.md`.
+- The simulator: [ratasim](https://github.com/JavierIH/ratasim) (`ratasim`), its `docs/simulator.md`.
 
 ## Operating the robot
 - After boot the LEDs sweep 1 -> 6 -> 1 until SELECT picks mode 1 (START

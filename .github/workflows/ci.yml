@@ -25,18 +25,3 @@ jobs:
       - run: make -C firmware/test/host small-queue
       - run: python3 -m unittest discover -s software/tests
 
-  simulator:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.11"
-      - run: pip install -e "software[sim]"
-      # The firmware on the simulated chip: it must build, and a search must reach the goal and come back.
-      - run: make -C software/ratatron/sim/fw
-      - run: |
-          ratatron sim --headless --speed 0 --no-pty --erase-flash --maze oshwdem2026 \
-            --cmd "MODE 1" --cmd START --until-idle --max-s 600 < /dev/null | tee sim.log
-          grep -q "End: OK" sim.log
-          ! grep -q "POSE LOST" sim.log

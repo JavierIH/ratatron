@@ -1,8 +1,8 @@
 """ratatron connect: the one program that holds the robot's link, shared with every tool.
 
-It opens the robot (/dev/rfcomm0 if bound, else an RFCOMM socket to the HC-05: no root needed; or the simulator's
+It opens the robot (/dev/rfcomm0 if bound, else an RFCOMM socket to the HC-05: no root needed; or ratasim's
 port with --sim), reconnects by itself when the link drops, records the whole session to software/logs/ (the
-simulator's to its build folder), the @D dumps as CSV to software/calib_data/, and serves the link on
+simulator's to a temporary folder), the @D dumps as CSV to software/calib_data/, and serves the link on
 127.0.0.1:7770: any number of tools attach at once
 (ratatron monitor, ratatron send, a pyserial URL socket://127.0.0.1:7770). Each gets every line the robot sends;
 each line a tool sends goes to the robot (`/note <text>` annotates the last dump instead).
@@ -41,7 +41,7 @@ class BtSocket:
 class Hub:
     def __init__(self, args):
         self.args = args
-        logs = os.path.join(paths.SIM_BUILD, 'logs') if args.sim else paths.LOGS    # only the robot's are kept
+        logs = paths.SIM_LOGS if args.sim else paths.LOGS    # only the robot's are kept
         os.makedirs(logs, exist_ok=True)
         os.makedirs(paths.RUNTIME, exist_ok=True)
         self.server = socket.create_server(paths.HUB_ADDRESS)
@@ -174,7 +174,7 @@ def main(argv=None):
                                 formatter_class=argparse.RawDescriptionHelpFormatter)
     p.add_argument('--port', help='serial port of the robot (default /dev/rfcomm0 if bound, else Bluetooth directly)')
     p.add_argument('--mac', default=paths.HC05, help='the HC-05 to reach without /dev/rfcomm0 (default %(default)s)')
-    p.add_argument('--sim', action='store_true', help='the simulator (ratatron sim) instead of the robot')
+    p.add_argument('--sim', action='store_true', help='the simulator (ratasim) instead of the robot')
     p.add_argument('--echo', action='store_true', help="print the robot's text lines here too")
     args = p.parse_args(argv)
     try:

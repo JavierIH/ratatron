@@ -15,7 +15,7 @@ At the robot (`ratatron flash practice`; everything below is in `develop`):
   (`fba2b1f`). Next flash: check it (2.6 on E, the first straight's
   heading ~0). In the simulator (11-18, `race-slip-2026-11-17.md` 5): the
   limit costs +3.3 % to the goal (~0.5 s) and fails less (2.6: 68 vs 88
-  of 523). The 2 deg curve clamp: rehearsed with `ratatron sim --slip`
+  of 523). The 2 deg curve clamp: rehearsed with `ratasim --slip`
   (an encoder heading error), see issue 24.
 - The front IR read ~6 mm short of `FRONT_WALL_REF_MM` (11-18,
   `docs/faults/front-ir-offset-2026-11-17.md`): the stops end ~4-6 mm
@@ -23,7 +23,7 @@ At the robot (`ratatron flash practice`; everything below is in `develop`):
   after a front alignment (39 mm if right, ~45 if not); then 94 -> ~88
   and 92 -> ~86, checking the side phantoms. `calib.txt` is obsolete.
 - Measure for the simulator (issue 24), then write them in
-  `software/ratatron/sim/config.py`: the mass (a scale), the centre of
+  ratasim's `ratasim/config.py`: the mass (a scale), the centre of
   mass along the robot (a knife-edge balance; its height if possible),
   the skids' gap to the floor (feeler gauge). Then check that race 2.6
   fails in the simulator as on the robot.
@@ -31,9 +31,9 @@ At the robot (`ratatron flash practice`; everything below is in `develop`):
   `monitor` attached at once all work, the monitor's map right).
 
 Without the robot:
-- The 3D viewer (`ratatron sim` with a screen) is untested.
+- The 3D viewer (`ratasim` with a screen) is untested.
 - The robot's 3D model (11-17): `mechanics/freecad/ratatron.fcstd`, only the
-  final parts visible; `export_cad.py` exports what is visible in FreeCAD's
+  final parts visible; ratasim's `export_cad.py` exports what is visible in FreeCAD's
   colours (N20s coloured as Pololu's: brass plates, steel gears); the
   sim's skids are the CAD's: race 2.6 on 58 real mazes, the same maps,
   3 failed vs 4 with the old skids (the same 3), 5 wall touches vs 11, same times.
@@ -68,21 +68,21 @@ Without the robot:
   (the long-corridor centring check of OSHWDEM goes with it). The
   baseboard oscillation check is dropped (11-16: no means to do it).
 
-- Issue 24, MuJoCo simulator (`ratatron sim`, `docs/simulator.md`): the firmware
+- Issue 24, MuJoCo simulator (now [ratasim](https://github.com/JavierIH/ratasim), its `docs/simulator.md`): the firmware
   (unchanged) on a simulated chip drives the CAD robot in a 16x16 maze;
   search and races 2.4-2.6 clean on a generated maze (11-17). Next, at
   the robot: weigh it and measure its centre of mass (along the axis, a
-  knife-edge balance), then write them in `software/ratatron/sim/config.py` (`MASS_KG`,
+  knife-edge balance), then write them in ratasim's `ratasim/config.py` (`MASS_KG`,
   `COM_MM`, now estimated: the fast curves depend on them) and check that
   2.6 fails in the simulator as on the robot. The viewer is untested (no
-  monitor in that session). 11-17: 525 real mazes (`ratatron sim batch`):
+  monitor in that session). 11-17: 525 real mazes (`ratasim batch`):
   searches 523/525 (2 unreachable goals), races 2.4 fail 13.6 % and 2.6
   20 %, almost all touching in curves. Causes found: the centring's
   heading offset kept through a curve (a curve begun mid-correction turns
   wide; chained curves turn it into an along-track error), and the
   centring turning in place while braking (the goal reached 11 deg off).
   Branch `sim-steer-ds`: the offset clamped to 2 deg at each curve, 2.4
-  fails 8 %, 2.6 17.5 % (simulator only). Curves (`ratatron sim curves`,
+  fails 8 %, 2.6 17.5 % (simulator only). Curves (`ratasim curves`,
   mazes spiral, stairs): single curves clean up to 480; chains of curves
   drift sideways every curve with no feedback (stairs: 2.6 crashes at
   the 11th). Prototype C (same branch): routes with 3+ chained curves at
@@ -95,7 +95,7 @@ Without the robot:
   its own speed): 2.4 fails 7.5 %, 2.6 10.1 %, 2.6 median +0.5 s (all
   curves at 400: 7.4 %, +1.25 s); the planner keeps its costs (--costs:
   no pair better by more than 0.3 %).
-  The real CAL RUN recordings of 09-26 (`ratatron sim real-ir`,
+  The real CAL RUN recordings of 09-26 (`ratasim real-ir`,
   layouts C and E): readings off the model by 5-15 mm (MAD), biases up
   to 45 mm, but the trajectory is dead reckoning and the layout guessed
   by the time: not conclusive. Next at the robot (~10 min): in a corner

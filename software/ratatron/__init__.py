@@ -1,1 +1,1 @@
-"""RATATRON: the tools of the micromouse (link, monitor, simulator, calibration)."""
+"""RATATRON: the tools of the micromouse (link, monitor, calibration)."""

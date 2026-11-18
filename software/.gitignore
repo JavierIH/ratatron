@@ -1,5 +1,3 @@
 .venv/
 *.egg-info/
 __pycache__/
-ratatron/sim/build/
-ratatron/sim/fw/build/

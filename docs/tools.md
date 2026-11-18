@@ -1,23 +1,21 @@
 # The `ratatron` tools
 
 `software/install.sh` installs the `ratatron` command (a virtual environment in `software/.venv`, editable: the
-tools run from this repository; `--no-sim` leaves MuJoCo out). `ratatron COMMAND -h` lists each one's options.
+tools run from this repository). `ratatron COMMAND -h` lists each one's options.
 
 | Command | What |
 |---|---|
-| `ratatron connect` | holds the robot's link (`/dev/rfcomm0`, else Bluetooth straight to the HC-05, no root), reconnects, records the session to `software/logs/` and `@D` dumps to `software/calib_data/`, shares the link on `127.0.0.1:7770`; `--sim`: the simulator instead |
+| `ratatron connect` | holds the robot's link (`/dev/rfcomm0`, else Bluetooth straight to the HC-05, no root), reconnects, records the session to `software/logs/` and `@D` dumps to `software/calib_data/`, shares the link on `127.0.0.1:7770`; `--sim`: the simulator ([ratasim](https://github.com/JavierIH/ratasim)) instead |
 | `ratatron send [-w REGEX] [-t S] CMD ...` | console commands through the shared link, and the answers |
 | `ratatron monitor` | the live maze monitor and console (below) |
-| `ratatron sim` | the robot in MuJoCo with its real firmware ([simulator.md](simulator.md)) |
-| `ratatron sim batch\|curves\|failures\|mapdiff\|demo\|ir-info\|real-ir` | the simulator's studies |
 | `ratatron calib CSV ...` | reports and suggested constants from calibration recordings ([usage.md](usage.md)) |
 | `ratatron cycles ELF [maze]` | the planner's cost on an emulated Cortex-M3 (`pip install -e "software[cycles]"`) |
 | `ratatron dashboard` | the `diag_test` firmware's LED, IR and encoder panel |
 | `ratatron flash ENV` | builds and flashes `competition`, `practice`, `dev` or `virtual` |
-| `ratatron test [--sim]` | host tests (also with a 16-state planner queue), the tools' tests, a simulator search |
+| `ratatron test` | host tests (also with a 16-state planner queue), the tools' tests |
 
 Typical session: `ratatron connect &`, then `ratatron monitor` and, from scripts, `ratatron send`; the simulator the
-same way with `ratatron sim` and `ratatron connect --sim`.
+same way with `ratasim` and `ratatron connect --sim`.
 
 ## Live monitor
 

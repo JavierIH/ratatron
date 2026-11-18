@@ -19,17 +19,18 @@ with smooth curves. Board, body, firmware, PC tools and a simulator, all here
 software/install.sh          # the `ratatron` command
 ratatron connect &           # the robot over Bluetooth: recorded, shared
 ratatron monitor             # the live maze and console
-ratatron sim                 # or the robot in MuJoCo, with its real firmware
 ratatron flash practice      # build and flash (competition: the 16x16 goal)
 ```
 
 ## Where things are
 
 - [firmware/](firmware/): the robot's code (PlatformIO, bare STM32 HAL) and its PC tests
-- [software/](software/): the `ratatron` tools (link, monitor, simulator, calibration) and the session logs
+- [software/](software/): the `ratatron` tools (link, monitor, calibration) and the session logs
 - [electronics/](electronics/) (KiCad), [mechanics/](mechanics/) (FreeCAD, STL)
 - [docs/](docs/README.md): [using the robot](docs/usage.md) (buttons, LEDs, console), [the tools](docs/tools.md),
-  [the simulator](docs/simulator.md), design, measurements, tests, faults
+  design, measurements, tests, faults
+- The simulator, the robot in MuJoCo with its real firmware (and other micromice with theirs):
+  [ratasim](https://github.com/JavierIH/ratasim), its own repository (this one as a submodule)
 - [AGENTS.md](AGENTS.md): architecture and conventions
 
 ## Licence

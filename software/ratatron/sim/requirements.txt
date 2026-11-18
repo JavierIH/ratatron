@@ -1,4 +1,0 @@
-mujoco>=3.2
-numpy
-pillow
-pyte          # tools/demo_monitor.py only
