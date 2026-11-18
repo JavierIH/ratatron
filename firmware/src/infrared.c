@@ -19,7 +19,7 @@ static const uint8_t SCAN_POS[IR_COUNT] = {
     [IR_SR] = 1,    // CH7
 };
 
-// mm = a*x^3 + b*x^2 + c*x + d, x = raw ADC counts (fitted on the robot; raw tables in calib.txt).
+// mm = a*x^3 + b*x^2 + c*x + d, x = raw ADC counts (fitted on the robot 2024-10-16; calib.txt is not their data).
 #define CAL_FL  -0.00000002278f, 0.000132f,  -0.2627f, 237.7f
 #define CAL_FR  -0.00000003535f, 0.0001995f, -0.3834f, 317.6f
 #define CAL_SL  -0.00000005219f, 0.0002629f, -0.4566f, 325.6f
