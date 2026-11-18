@@ -13,8 +13,15 @@ At the robot (`ratatron flash practice`; everything below is in `develop`):
   on F (rolling: ~5 mm in 34 m; the error is slips). Found: at 900 the run-up
   slipped at `ACCEL` 3000 (5-6.5 deg); the races now at most 2000
   (`fba2b1f`). Next flash: check it (2.6 on E, the first straight's
-  heading ~0); the 2 deg curve clamp to review first in the simulator
-  with an encoder bias (it throws away a real offset).
+  heading ~0). In the simulator (11-18, `race-slip-2026-11-17.md` 5): the
+  limit costs +3.3 % to the goal (~0.5 s) and fails less (2.6: 68 vs 88
+  of 523). The 2 deg curve clamp: rehearsed with `ratatron sim --slip`
+  (an encoder heading error), see issue 24.
+- The front IR read ~6 mm short of `FRONT_WALL_REF_MM` (11-18,
+  `docs/faults/front-ir-offset-2026-11-17.md`): the stops end ~4-6 mm
+  before the centre. At the robot: a ruler from the nose to the wall
+  after a front alignment (39 mm if right, ~45 if not); then 94 -> ~88
+  and 92 -> ~86, checking the side phantoms. `calib.txt` is obsolete.
 - Measure for the simulator (issue 24), then write them in
   `software/ratatron/sim/config.py`: the mass (a scale), the centre of
   mass along the robot (a knife-edge balance; its height if possible),
