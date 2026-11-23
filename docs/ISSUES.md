@@ -29,13 +29,22 @@ At the robot (`ratatron flash practice`; everything below is in `develop`):
   fails in the simulator as on the robot.
 - `ratatron connect` via rfcomm0 (11-17: the RFCOMM socket, `send` and
   `monitor` attached at once all work, the monitor's map right).
-- Branch `sim-trajectory` (11-23, not in develop: merge it first if the
-  user agrees): the centring between chained curves and on the short
-  straight after the last one (`docs/faults/chained-curves-2026-11-23.md`).
-  On layout E: 2.4 and 2.5 with `CAL RUN`, `in` against the 11-17 table,
-  the yaw at the goal.
+- The centring between chained curves and on the short straight after
+  the last one (11-23, merged; simulator only,
+  `docs/faults/chained-curves-2026-11-23.md` 7): flash `practice`, layout
+  E, a search, then 2.4 and 2.5 with `CAL RUN`: `in` (the lateral entering
+  the last straight) against the 11-17 table, the yaw at the goal
+  (`FL - FR` after the front alignment), no contact in the staircase.
 
 Without the robot:
+- Simulator, after 11-23 (`docs/faults/chained-curves-2026-11-23.md` 6;
+  12 of 1569 races fail on 528 mazes): first, why a single curve at 400
+  can end 28 mm inside from a centred, parallel entry (`kilkai`, race
+  2.5, the curve into column 14): along-track error at its start or
+  slip; it feeds the 5 failures on open straights. Then the 5 in chains
+  of 4-6 curves. The session's analysis scripts (traced batches, curve
+  gates, contacts, paired times) are local in `temp/sim-analysis/`
+  (README.txt there; not in git): move them into ratasim first.
 - The 3D viewer (`ratasim` with a screen) is untested.
 - The robot's 3D model (11-17): `mechanics/freecad/ratatron.fcstd`, only the
   final parts visible; ratasim's `export_cad.py` exports what is visible in FreeCAD's
@@ -109,7 +118,7 @@ Without the robot:
   readings against the angle with known geometry. Done 11-17 as one slow
   turn (`docs/testing.md`): the sides match the model within 3 mm, the
   fronts a steady -6 to -9 mm.
-  11-23 (branch `sim-trajectory`, `docs/faults/chained-curves-2026-11-23.md`):
+  11-23 (merged, `docs/faults/chained-curves-2026-11-23.md`):
   the centring also over the chained curves' first and last 8 mm, no fade
   before a chained curve, and only aligning (no P) on a final straight
   shorter than a cell: 528 mazes, races failed 5.4 -> 0.8 %, contacts 142
