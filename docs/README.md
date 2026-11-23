@@ -17,6 +17,7 @@
 | [faults/oshwdem2026.md](faults/oshwdem2026.md) | OSHWDEM 2026: the lost map, the flash wedge's cause (motor transients) and fix, other faults |
 | [faults/centring.md](faults/centring.md) | the centring far from the centre line (GitHub issue #1): crooked starts, the IR delay, the PD wall follower |
 | [faults/front-ir-offset-2026-11-17.md](faults/front-ir-offset-2026-11-17.md) | the front IR ~6 mm short of `FRONT_WALL_REF_MM` (stops before the centre), FR's cubic 10 % steep; `calib.txt` obsolete |
+| [faults/chained-curves-2026-11-23.md](faults/chained-curves-2026-11-23.md) | the races' errors in the simulator (528 mazes): curves in consecutive cells drift, yawed stops after a last curve; the centring between curves (races failed 5.4 -> 0.8 %) |
 
 Logs and recordings before 2026-10-06 are in Spanish. The firmware's
 messages now read: `fin=` `end=`, `lados=` `sides=`, `PARED` `WALL`,
