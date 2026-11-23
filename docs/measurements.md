@@ -73,6 +73,13 @@ The numbers behind the constants that docs/design.md does not already give
   open loop through `steer_step()`, the worst 50-ms heading change past
   the first 250 mm fell from 23.7 to 3.1 deg at the 10-08 `SLIPPED`,
   15.8 -> 1.6, 11.9 -> 2.6 at other wall ends (mean of all 5.8 -> 4.3).
+- `STEER_CURVE_EDGE_MM` 8 (11-23, simulator, ratasim `f616de5`; 108 mazes,
+  races 2.4-2.6 on the maps of one search): the clothoid turns s^2 / (2 R
+  ramp) = 0.9 deg in its first 8 mm, so the side IR read there as on a
+  straight. Centring over a curve's first and last 8, 15 or 25 mm: failed
+  races 4, 7, 11 of ~310 (17 without), hull contacts 4, 8, 10 (32); |lateral|
+  entering the 10th curve of a chain, p95 17, 18, 22 mm (35). The least
+  into the curve that does as well (`docs/faults/chained-curves-2026-11-23.md`).
   In the simulator with posts (sweep of 6-12 mm by 10-30 mm): the
   staircase that left the path by 56-66 mm stays within 1-7 mm; 8/20
   keeps the crooked starts as before (|y| at the cell centres 2.81 ->
