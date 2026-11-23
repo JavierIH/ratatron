@@ -29,6 +29,11 @@ At the robot (`ratatron flash practice`; everything below is in `develop`):
   fails in the simulator as on the robot.
 - `ratatron connect` via rfcomm0 (11-17: the RFCOMM socket, `send` and
   `monitor` attached at once all work, the monitor's map right).
+- Branch `sim-trajectory` (11-23, not in develop: merge it first if the
+  user agrees): the centring between chained curves and on the short
+  straight after the last one (`docs/faults/chained-curves-2026-11-23.md`).
+  On layout E: 2.4 and 2.5 with `CAL RUN`, `in` against the 11-17 table,
+  the yaw at the goal.
 
 Without the robot:
 - The 3D viewer (`ratasim` with a screen) is untested.
@@ -104,6 +109,14 @@ Without the robot:
   readings against the angle with known geometry. Done 11-17 as one slow
   turn (`docs/testing.md`): the sides match the model within 3 mm, the
   fronts a steady -6 to -9 mm.
+  11-23 (branch `sim-trajectory`, `docs/faults/chained-curves-2026-11-23.md`):
+  the centring also over the chained curves' first and last 8 mm, no fade
+  before a chained curve, and only aligning (no P) on a final straight
+  shorter than a cell: 528 mazes, races failed 5.4 -> 0.8 %, contacts 142
+  -> 18, the same times; `--slip 6` 14.3 -> 2.6 %. Left: chains of 4-6
+  curves (5 failures) and open straights after a curve (5: ~2 deg of
+  exit yaw, dead reckoning into a post); next, why a single curve at 400
+  can end 28 mm inside (`kilkai`).
 ## Closed
 
 - 2026-11-17 RAM savings (`ram-savings`, merged into develop): 1.1 KB
