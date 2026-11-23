@@ -137,6 +137,7 @@ static control_t ctl;
 static steer_t steer;
 static volatile uint8_t control_on, steer_on;
 static volatile float steer_gain;
+static volatile uint8_t steer_align;     // the centring only aligns with the walls (no P term)
 // A path run steps `run` instead of the profiles; the main context only writes run.stop_at and run.hold.
 static path_run_t run;
 static volatile uint8_t path_on;
@@ -179,8 +180,10 @@ void motion_tick_1ms(void){
     }
     float heading = 0.0f;
     if(steer_on){
-        // In a curve, and until the IR read the new corridor, hold the heading offset; then start afresh.
-        if(path_on && !(run.s < run.curve_start && fwd_at_ir() >= run.last_curve_end)){
+        // In a curve (but its first and last STEER_CURVE_EDGE_MM, a straight to the side IR), and until the IR read
+        // the new corridor, hold the heading offset; then start afresh.
+        if(path_on && !(run.s < run.curve_start + STEER_CURVE_EDGE_MM
+                        && fwd_at_ir() >= run.last_curve_end - STEER_CURVE_EDGE_MM)){
             if(!steer_blind){   // PROTOTYPE B: a curve keeps only what can be drift of the centring's offset
                 if(steer.heading > 2.0f) steer.heading = 2.0f;
                 if(steer.heading < -2.0f) steer.heading = -2.0f;
@@ -194,6 +197,7 @@ void motion_tick_1ms(void){
                 steer_restart(&steer);
                 steer_blind = 0;
             }
+            steer_cfg.kp = steer_align ? 0.0f : params.kp;
             heading = steer_step(&steer, &steer_cfg, ir_mm(IR_SL), ir_mm(IR_SR), CONTROL_DT_S, fwd.delta, steer_gain);
             static const uint8_t WALL_LEDS[4] = {0x00, 0x07, 0x38, 0x3F};   // none, right, left, both
             leds_set_mask(WALL_LEDS[steer.wall & 3u]);
@@ -228,6 +232,7 @@ static void control_begin(uint8_t steering){
     control_reset(&ctl);
     steer_reset(&steer);
     steer_gain = 1.0f;
+    steer_align = 0;
     steer_on = steering;
     for(uint8_t i = 0; i < TRAIL_LEN; i++) trail[i] = 0.0f;
 }
@@ -515,9 +520,14 @@ static move_result_t run_path(const run_path_t *path, int16_t cruise_speed, int1
         at = fwd_actual();
         const float v = run.v, ir_at = fwd_at_ir();
         if(v > vmax) vmax = v;
-        // The centring fades out over the last STEER_FADE_MM before every curve and the end.
-        const float remaining = fminf(run.curve_start, run.stop_at) - at;
+        // The centring fades out over the last STEER_FADE_MM before every curve and the end, but not before a curve
+        // in the next cell (a chain): the few mm between the two are all it gets.
+        const uint8_t chained = run.curve_start < run.stop_at && run.curve_start - run.last_curve_end < 0.5f * CELL_MM;
+        const float remaining = chained ? STEER_FADE_MM : fminf(run.curve_start, run.stop_at) - at;
         steer_gain = remaining < STEER_FADE_MM ? fmaxf(remaining, 0.0f) / STEER_FADE_MM : 1.0f;
+        // After the last curve, a straight shorter than a cell cannot finish a correction: only align with the walls,
+        // so the robot stops parallel to them instead of turned mid-correction.
+        steer_align = run.curves > 0 && run.next >= run.path.cells && run.stop_at - run.last_curve_end < CELL_MM;
         if(ex){
             if(!short_stop) planned_end = run.length;     // it grows as the search decides
             explore_step(ex, &g, v, ir_at, ir_seen >= FRONT_CONFIRM_MS);

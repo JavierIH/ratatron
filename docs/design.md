@@ -54,8 +54,14 @@ behind the constants: docs/measurements.md. AGENTS.md has the rules.
   `STEER_HOLD_MM` (20) mm, and so does a wall that appears: the edges of
   a wall read short and long for ~5-16 mm (`docs/faults/centring.md`,
   section 11). It fades out over the last 40 mm of a move and before
-  every curve, and holds its offset through a curve until the IR read the
-  new corridor. Defaults KP 8, KD 0.6, chosen in the simulator with the side
+  every curve but one in the next cell, and holds its offset through a
+  curve until the IR read the new corridor, except over the curve's first
+  and last `STEER_CURVE_EDGE_MM` (8; the clothoid is there < 1 deg off the
+  axis): the only straight that curves in consecutive cells have, so a
+  staircase's error does not carry from curve to curve. After a route's
+  last curve, a final straight shorter than a cell only aligns with the
+  walls (no P term): a correction the stop cuts would leave the robot
+  yawed (`docs/faults/chained-curves-2026-11-23.md`). Defaults KP 8, KD 0.6, chosen in the simulator with the side
   IR 8 ms late (robust from 5 to 20 ms): against the old controller on the
   same robot model every case ends closer to the centre, crooked starts of
   30-35 deg included (`docs/faults/centring.md`). The controller it replaced
@@ -110,7 +116,8 @@ behind the constants: docs/measurements.md. AGENTS.md has the rules.
   brake after the last curve, and by the motors (`CURVE_PWM_SHARE`: ~480
   mm/s; in the simulator 700 fell 15-57 mm behind and cut inside). The
   centring holds its offset through a curve and restarts in the new
-  corridor once the delayed IR read it. The front sensors are only used with
+  corridor once the delayed IR read it (between curves in consecutive
+  cells, over their first and last 8 mm: centring, above). The front sensors are only used with
   readings taken on a straight.
 - Tuning the curves: `CAL CURVE [+-1] [mm/s]` from a cell centre (one cell, a
   curve, one cell; best with side walls and a front wall in the last cell),

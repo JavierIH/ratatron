@@ -364,8 +364,8 @@ search leg; the dump comes when the run ends).
 - Memory: the map and planner are sized for 16x16 in every build
   (`PRACTICE_MAZE` only changes the goal). With the tools (`practice`,
   `dev`): RAM 79.3 % (~4.2 KB left for the stack, ~1.5 KB of it
-  used), flash 91.8 % of 62 KB (5.2 KB left); `competition`: RAM 47.6 %,
-  flash 83.3 % (10.6 KB left).
+  used), flash 92.8 % of 62 KB (4.4 KB left); `competition`: RAM 47.6 %,
+  flash 84.0 % (9.9 KB left).
   Keep that headroom: report sizes after every change,
   reuse buffers (the search's legs borrow the speed run's route buffer).
 - Health checks and clock (details in `docs/design.md`): `STATUS` shows the
